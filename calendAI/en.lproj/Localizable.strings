@@ -1,0 +1,62 @@
+/* Common */
+"common.cancel" = "Cancel";
+"common.done" = "Done";
+"common.delete" = "Delete";
+"common.save" = "Save";
+"common.edit" = "Edit";
+"common.add" = "Add";
+"common.none" = "None";
+"common.yes" = "Yes";
+"common.no" = "No";
+
+/* Tasks */
+"tasks.title" = "Tasks";
+"tasks.new_task" = "New Task";
+"tasks.edit_task" = "Edit Task";
+"tasks.create_task" = "Create Task";
+"tasks.save_changes" = "Save Changes";
+"tasks.delete_task" = "Delete Task";
+"tasks.delete_confirmation" = "Delete Task?";
+"tasks.delete_message" = "This action cannot be undone";
+"tasks.task_title" = "Task Title";
+"tasks.task_title_placeholder" = "What needs to be done?";
+"tasks.notes" = "Notes";
+"tasks.notes_placeholder" = "Additional information...";
+"tasks.due_date" = "Due Date";
+"tasks.select_date_time" = "Select date and time";
+"tasks.priority" = "Priority";
+"tasks.reminder_will_be_created" = "Reminder will be created";
+"tasks.complete" = "Complete";
+"tasks.resume" = "Resume";
+"tasks.remaining" = "Remaining";
+"tasks.completed" = "Completed";
+"tasks.upcoming" = "Upcoming";
+
+/* Today View */
+"today.hello" = "Hello! 👋";
+"today.todays_tasks" = "Today's Tasks";
+"today.completed_today" = "Completed Today";
+"today.hide" = "Hide";
+"today.show_all" = "Show All";
+"today.show_all_with_count" = "Show All (%d)";
+"today.empty_state_title" = "Great!";
+"today.empty_state_message" = "No tasks for today.\nYou can relax or plan something new.";
+
+/* Greetings */
+"today.good_morning" = "Good morning!";
+"today.good_afternoon" = "Good afternoon!";
+"today.good_evening" = "Good evening!";
+"today.good_night" = "Good night!";
+
+/* Motivational quotes */
+"today.quote_1" = "Every day is a new opportunity to become better";
+"today.quote_2" = "Small steps lead to big achievements";
+"today.quote_3" = "Focus on progress, not perfection";
+"today.quote_4" = "Success is the sum of small efforts";
+"today.quote_5" = "To begin is to be half done";
+
+/* Priority */
+"priority.none" = "None";
+"priority.low" = "Low";
+"priority.medium" = "Medium";
+"priority.high" = "High";

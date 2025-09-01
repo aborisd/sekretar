@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="1" systemVersion="11A491" minimumToolsVersion="Automatic" sourceLanguage="Swift" usedWithCloudKit="false" userDefinedModelVersionIdentifier="">
+    <entity name="TaskEntity" representedClassName="TaskEntity" syncable="YES" codeGenerationType="class">
+        <attribute name="id" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="title" attributeType="String"/>
+        <attribute name="notes" optional="YES" attributeType="String"/>
+        <attribute name="dueDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="reminderDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="isCompleted" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="priority" attributeType="Integer 16" defaultValueString="1" usesScalarValueType="YES"/>
+        <attribute name="tags" optional="YES" attributeType="String"/>
+        <attribute name="projectID" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="createdAt" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="updatedAt" attributeType="Date" usesScalarValueType="NO"/>
+        <relationship name="project" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="ProjectEntity" inverseName="tasks" inverseEntity="ProjectEntity"/>
+    </entity>
+    <entity name="EventEntity" representedClassName="EventEntity" syncable="YES" codeGenerationType="class">
+        <attribute name="id" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="title" attributeType="String"/>
+        <attribute name="startDate" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="endDate" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="isAllDay" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="notes" optional="YES" attributeType="String"/>
+        <attribute name="eventKitId" optional="YES" attributeType="String"/>
+    </entity>
+    <entity name="ProjectEntity" representedClassName="ProjectEntity" syncable="YES" codeGenerationType="class">
+        <attribute name="id" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="title" attributeType="String"/>
+        <attribute name="color" optional="YES" attributeType="String"/>
+        <attribute name="createdAt" attributeType="Date" usesScalarValueType="NO"/>
+        <relationship name="tasks" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="TaskEntity" inverseName="project" inverseEntity="TaskEntity"/>
+    </entity>
+    <entity name="UserPrefEntity" representedClassName="UserPrefEntity" syncable="YES" codeGenerationType="class">
+        <attribute name="id" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="key" attributeType="String"/>
+        <attribute name="value" optional="YES" attributeType="String"/>
+        <attribute name="updatedAt" attributeType="Date" usesScalarValueType="NO"/>
+    </entity>
+    <entity name="AIActionLogEntity" representedClassName="AIActionLogEntity" syncable="YES" codeGenerationType="class">
+        <attribute name="id" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="action" attributeType="String"/>
+        <attribute name="payload" optional="YES" attributeType="String"/>
+        <attribute name="confidence" attributeType="Float" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="requiresConfirmation" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="isExecuted" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="createdAt" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="executedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+    </entity>
+    <elements>
+        <element name="TaskEntity" positionX="-63" positionY="-18" width="128" height="164"/>
+        <element name="EventEntity" positionX="117" positionY="-18" width="128" height="134"/>
+        <element name="ProjectEntity" positionX="-243" positionY="-18" width="128" height="104"/>
+        <element name="UserPrefEntity" positionX="-63" positionY="162" width="128" height="89"/>
+        <element name="AIActionLogEntity" positionX="117" positionY="162" width="128" height="149"/>
+    </elements>
+</model>

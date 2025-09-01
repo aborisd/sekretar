@@ -1,0 +1,301 @@
+import Foundation
+import SwiftUI
+import UserNotifications
+import EventKit
+
+enum AIProvider: String, CaseIterable {
+    case onDevice = "on_device"
+    case cloud = "cloud"
+    
+    var displayName: String {
+        switch self {
+        case .onDevice: return "On-Device"
+        case .cloud: return "Cloud API"
+        }
+    }
+}
+
+@MainActor
+final class SettingsViewModel: ObservableObject {
+    // MARK: - Published Properties
+    @Published var notificationsEnabled = false
+    @Published var eventKitSyncEnabled = false
+    @Published var aiSuggestionsEnabled = true
+    @Published var voiceInputEnabled = false
+    @Published var analyticsEnabled = true
+    @Published var aiProvider: AIProvider = .onDevice
+    @Published var showingDeleteAlert = false
+    
+    // MARK: - Computed Properties
+    var appVersion: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown"
+    }
+    
+    var buildNumber: String {
+        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "Unknown"
+    }
+    
+    var isDebugBuild: Bool {
+        #if DEBUG
+        return true
+        #else
+        return false
+        #endif
+    }
+    
+    // MARK: - Private Properties
+    private let userDefaults = UserDefaults.standard
+    private let eventStore = EKEventStore()
+    
+    // MARK: - Initialization
+    init() {
+        loadSettings()
+        checkCurrentPermissions()
+    }
+    
+    // MARK: - Settings Management
+    private func loadSettings() {
+        notificationsEnabled = userDefaults.bool(forKey: "notifications_enabled")
+        eventKitSyncEnabled = userDefaults.bool(forKey: "eventkit_sync_enabled")
+        aiSuggestionsEnabled = userDefaults.bool(forKey: "ai_suggestions_enabled")
+        voiceInputEnabled = userDefaults.bool(forKey: "voice_input_enabled")
+        analyticsEnabled = userDefaults.bool(forKey: "analytics_enabled")
+        
+        if let providerString = userDefaults.string(forKey: "ai_provider"),
+           let provider = AIProvider(rawValue: providerString) {
+            aiProvider = provider
+        }
+    }
+    
+    private func saveSettings() {
+        userDefaults.set(notificationsEnabled, forKey: "notifications_enabled")
+        userDefaults.set(eventKitSyncEnabled, forKey: "eventkit_sync_enabled")
+        userDefaults.set(aiSuggestionsEnabled, forKey: "ai_suggestions_enabled")
+        userDefaults.set(voiceInputEnabled, forKey: "voice_input_enabled")
+        userDefaults.set(analyticsEnabled, forKey: "analytics_enabled")
+        userDefaults.set(aiProvider.rawValue, forKey: "ai_provider")
+        
+        // Track analytics
+        AnalyticsService.shared.track(.settingsOpened, properties: [
+            "notifications_enabled": notificationsEnabled,
+            "eventkit_sync_enabled": eventKitSyncEnabled,
+            "ai_suggestions_enabled": aiSuggestionsEnabled,
+            "analytics_enabled": analyticsEnabled,
+            "ai_provider": aiProvider.rawValue
+        ])
+    }
+    
+    private func checkCurrentPermissions() {
+        Task {
+            // Check notification permissions
+            let notificationSettings = await UNUserNotificationCenter.current().notificationSettings()
+            notificationsEnabled = notificationSettings.authorizationStatus == .authorized
+            
+            // Check EventKit permissions
+            eventKitSyncEnabled = EKEventStore.authorizationStatus(for: .event) == .authorized
+        }
+    }
+    
+    // MARK: - Permission Requests
+    func requestNotificationPermission() async {
+        let granted = await NotificationService.requestAuthorization()
+        notificationsEnabled = granted
+        saveSettings()
+        
+        if granted {
+            NotificationService.setupNotificationCategories()
+        }
+    }
+    
+    func requestEventKitPermission() async {
+        let granted: Bool
+        
+        if #available(iOS 17.0, *) {
+            granted = (try? await eventStore.requestFullAccessToEvents()) ?? false
+        } else {
+            granted = await withCheckedContinuation { continuation in
+                eventStore.requestAccess(to: .event) { success, _ in
+                    continuation.resume(returning: success)
+                }
+            }
+        }
+        
+        eventKitSyncEnabled = granted
+        saveSettings()
+        
+        if granted {
+            // Trigger initial import
+            // This would integrate with EventKitService
+            AnalyticsService.shared.track(.calendarImported)
+        }
+    }
+    
+    // MARK: - Data Management
+    func exportData() {
+        // TODO: Implement data export
+        let exportData: [String: Any] = [
+            "version": appVersion,
+            "exported_at": ISO8601DateFormatter().string(from: Date()),
+            "settings": [
+                "notifications_enabled": notificationsEnabled,
+                "eventkit_sync_enabled": eventKitSyncEnabled,
+                "ai_suggestions_enabled": aiSuggestionsEnabled,
+                "voice_input_enabled": voiceInputEnabled,
+                "analytics_enabled": analyticsEnabled,
+                "ai_provider": aiProvider.rawValue
+            ]
+        ]
+        
+        do {
+            let jsonData = try JSONSerialization.data(withJSONObject: exportData, options: .prettyPrinted)
+            // In a real implementation, this would save to Files app or share
+            print("Export data: \(String(data: jsonData, encoding: .utf8) ?? "")")
+        } catch {
+            print("Export error: \(error)")
+        }
+    }
+    
+    func deleteAllData() {
+        // Clear UserDefaults
+        let defaults = UserDefaults.standard
+        defaults.removeObject(forKey: "notifications_enabled")
+        defaults.removeObject(forKey: "eventkit_sync_enabled")
+        defaults.removeObject(forKey: "ai_suggestions_enabled")
+        defaults.removeObject(forKey: "voice_input_enabled")
+        defaults.removeObject(forKey: "analytics_enabled")
+        defaults.removeObject(forKey: "ai_provider")
+        
+        // TODO: Clear Core Data
+        // This would integrate with PersistenceController to delete all entities
+        
+        // Reset to defaults
+        loadSettings()
+        
+        // Track deletion
+        AnalyticsService.shared.track(.settingsOpened, properties: [
+            "action": "delete_all_data"
+        ])
+    }
+    
+    // MARK: - Debug Functions
+    func generateTestData() {
+        let context = PersistenceController.shared.container.viewContext
+        
+        Task {
+            await context.perform {
+                // Generate test projects
+                let projects = ["Work", "Personal", "Health", "Learning"]
+                var projectEntities: [ProjectEntity] = []
+                
+                for projectName in projects {
+                    let project = ProjectEntity(context: context)
+                    project.id = UUID()
+                    project.title = projectName
+                    project.color = ["blue", "green", "orange", "purple"].randomElement()
+                    project.createdAt = Date()
+                    projectEntities.append(project)
+                }
+                
+                // Generate test tasks
+                let taskTitles = [
+                    "Complete project proposal",
+                    "Review team performance",
+                    "Prepare presentation slides",
+                    "Call dentist appointment",
+                    "Grocery shopping",
+                    "Workout at gym",
+                    "Read Swift documentation",
+                    "Update resume",
+                    "Plan weekend trip",
+                    "Fix kitchen faucet"
+                ]
+                
+                for (index, title) in taskTitles.enumerated() {
+                    let task = TaskEntity(context: context)
+                    task.id = UUID()
+                    task.title = title
+                    task.notes = "Sample task #\(index + 1) for testing UI"
+                    task.isCompleted = Bool.random()
+                    task.priority = Int16.random(in: 0...3)
+                    task.createdAt = Date().addingTimeInterval(-Double.random(in: 0...604800)) // Within last week
+                    task.updatedAt = task.createdAt
+                    task.dueDate = Date().addingTimeInterval(Double.random(in: 0...604800)) // Next week
+                    task.project = projectEntities.randomElement()
+                }
+                
+                // Generate test events  
+                let eventTitles = [
+                    "Team standup meeting",
+                    "Doctor appointment", 
+                    "Lunch with Sarah",
+                    "Conference call",
+                    "Birthday party",
+                    "Yoga class",
+                    "Code review session",
+                    "Client presentation"
+                ]
+                
+                for (index, title) in eventTitles.enumerated() {
+                    let event = EventEntity(context: context)
+                    event.id = UUID()
+                    event.title = title
+                    event.notes = "Sample event #\(index + 1) for testing"
+                    
+                    let startOffset = Double.random(in: 0...604800) // Next week
+                    event.startDate = Date().addingTimeInterval(startOffset)
+                    event.endDate = event.startDate.addingTimeInterval(Double.random(in: 1800...7200)) // 30min to 2hrs
+                    event.isAllDay = Bool.random() && index % 3 == 0 // Some all-day events
+                }
+                
+                do {
+                    try context.save()
+                    print("✅ Generated test data successfully!")
+                } catch {
+                    print("❌ Error generating test data: \(error)")
+                }
+            }
+        }
+    }
+    
+    func clearAllData() {
+        deleteAllData()
+    }
+    
+    func testNotifications() {
+        Task {
+            let content = UNMutableNotificationContent()
+            content.title = "Test Notification"
+            content.body = "This is a test notification from CalendAI"
+            content.sound = .default
+            
+            let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 2, repeats: false)
+            let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: trigger)
+            
+            try? await UNUserNotificationCenter.current().add(request)
+        }
+    }
+}
+
+// MARK: - Debug ViewModel
+@MainActor
+final class DebugViewModel: ObservableObject {
+    @Published var logs: [String] = []
+    
+    init() {
+        loadLogs()
+    }
+    
+    private func loadLogs() {
+        // In a real implementation, this would read from log files
+        logs = [
+            "[INFO] App launched",
+            "[DEBUG] Core Data stack initialized",
+            "[INFO] EventKit permission requested",
+            "[DEBUG] Notification categories configured"
+        ]
+    }
+    
+    func clearLogs() {
+        logs.removeAll()
+    }
+}

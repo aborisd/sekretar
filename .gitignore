@@ -1,0 +1,46 @@
+.DS_Store
+.Spotlight-V100
+.Trashes
+
+# Xcode
+DerivedData/
+build/
+*.xcuserstate
+*.xccheckout
+*.moved-aside
+*.xcscmblueprint
+*.xcuserdatad/
+*.xcworkspace/xcuserdata/
+
+# Swift Package Manager
+.build/
+/.swiftpm/
+Package.resolved
+
+# CocoaPods (not used, but ignore if appears)
+Pods/
+
+# Carthage (not used, but ignore if appears)
+Carthage/
+
+# Archives & temp
+*.zip
+*.tar.gz
+*.dmg
+*.tmp
+*.log
+
+# Python virtualenv (local tooling)
+.venv/
+
+# Editors
+.idea/
+.vscode/
+*.code-workspace
+
+# Local artifact bundle
+calendAI_M1_Complete_*.tar.gz
+
+# Local dev artifacts
+.selected_sim_udid
+.claude/

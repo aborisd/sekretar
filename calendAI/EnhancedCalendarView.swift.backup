@@ -1,0 +1,553 @@
+import SwiftUI
+import CoreData
+
+struct EnhancedCalendarView: View {
+    @Environment(\.managedObjectContext) private var context
+    @StateObject private var viewModel = CalendarViewModel(context: PersistenceController.shared.container.viewContext)
+    @State private var showingTaskEditor = false
+    @State private var showingEventDetail = false
+    @State private var selectedTask: TaskEntity?
+    @State private var selectedEvent: EventEntity?
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                // Header with view mode controls
+                headerSection
+                
+                // Calendar content
+                calendarContent
+                    .animation(.easeInOut(duration: 0.3), value: viewModel.viewMode)
+            }
+            .background(DesignSystem.Colors.background)
+            .navigationTitle("")
+            .navigationBarHidden(true)
+        }
+        .sheet(isPresented: $showingTaskEditor) {
+            if let task = selectedTask {
+                TaskEditorView(task: task)
+            } else {
+                // Create new task
+                TaskEditorView(task: createNewTask())
+            }
+        }
+        .sheet(isPresented: $showingEventDetail) {
+            if let event = selectedEvent {
+                EventDetailView(event: event)
+            }
+        }
+    }
+    
+    // MARK: - Header Section
+    private var headerSection: some View {
+        VStack(spacing: DesignSystem.Spacing.md) {
+            // Title and navigation
+            HStack {
+                Button(action: viewModel.navigatePrevious) {
+                    Image(systemName: "chevron.left")
+                        .font(.title3)
+                        .foregroundColor(DesignSystem.Colors.primaryBlue)
+                }
+                
+                Spacer()
+                
+                Text(viewModel.periodString)
+                    .font(DesignSystem.Typography.title2)
+                    .foregroundColor(DesignSystem.Colors.textPrimary)
+                    .onTapGesture {
+                        withAnimation(.spring()) {
+                            viewModel.goToToday()
+                        }
+                    }
+                
+                Spacer()
+                
+                Button(action: viewModel.navigateNext) {
+                    Image(systemName: "chevron.right")
+                        .font(.title3)
+                        .foregroundColor(DesignSystem.Colors.primaryBlue)
+                }
+            }
+            
+            // View mode selector
+            HStack(spacing: DesignSystem.Spacing.sm) {
+                ForEach([CalendarViewMode.day, .week, .month], id: \.self) { mode in
+                    Button(action: { viewModel.switchViewMode(mode) }) {
+                        Text(modeName(for: mode))
+                            .font(DesignSystem.Typography.caption)
+                            .foregroundColor(
+                                viewModel.viewMode == mode ? 
+                                .white : DesignSystem.Colors.textSecondary
+                            )
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(
+                                viewModel.viewMode == mode ?
+                                DesignSystem.Colors.primaryBlue :
+                                DesignSystem.Colors.cardBackground
+                            )
+                            .cornerRadius(16)
+                    }
+                }
+                
+                Spacer()
+                
+                Button(action: viewModel.goToToday) {
+                    Text("Сегодня")
+                        .font(DesignSystem.Typography.caption)
+                        .foregroundColor(DesignSystem.Colors.primaryBlue)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(DesignSystem.Colors.primaryBlue.opacity(0.1))
+                        .cornerRadius(16)
+                }
+                
+                Button(action: {
+                    selectedTask = nil
+                    showingTaskEditor = true
+                }) {
+                    Image(systemName: "plus")
+                        .font(.title3)
+                        .foregroundColor(DesignSystem.Colors.primaryBlue)
+                        .padding(6)
+                        .background(DesignSystem.Colors.primaryBlue.opacity(0.1))
+                        .cornerRadius(8)
+                }
+            }
+        }
+        .padding(.horizontal)
+        .padding(.vertical, DesignSystem.Spacing.md)
+        .background(DesignSystem.Colors.cardBackground)
+    }
+    
+    // MARK: - Calendar Content
+    @ViewBuilder
+    private var calendarContent: some View {
+        switch viewModel.viewMode {
+        case .day:
+            DayView(viewModel: viewModel) { task in
+                selectedTask = task
+                showingTaskEditor = true
+            } onEventTap: { event in
+                selectedEvent = event
+                showingEventDetail = true
+            }
+        case .week:
+            WeekView(viewModel: viewModel) { task in
+                selectedTask = task
+                showingTaskEditor = true
+            } onEventTap: { event in
+                selectedEvent = event
+                showingEventDetail = true
+            }
+        case .month:
+            MonthView(viewModel: viewModel) { date in
+                viewModel.selectDate(date)
+                viewModel.switchViewMode(.day)
+            }
+        }
+    }
+    
+    // MARK: - Helper Methods
+    private func modeName(for mode: CalendarViewMode) -> String {
+        switch mode {
+        case .day: return "День"
+        case .week: return "Неделя"
+        case .month: return "Месяц"
+        }
+    }
+    
+    private func createNewTask() -> TaskEntity {
+        let task = TaskEntity(context: context)
+        task.id = UUID()
+        task.title = ""
+        task.notes = nil
+        task.priority = 1
+        task.isCompleted = false
+        task.createdAt = Date()
+        task.updatedAt = Date()
+        task.dueDate = viewModel.selectedDate
+        return task
+    }
+}
+
+// MARK: - Day View
+struct DayView: View {
+    @ObservedObject var viewModel: CalendarViewModel
+    let onTaskTap: (TaskEntity) -> Void
+    let onEventTap: (EventEntity) -> Void
+    
+    var body: some View {
+        ScrollView {
+            LazyVStack(spacing: DesignSystem.Spacing.md) {
+                ForEach(hourSlots, id: \.self) { hour in
+                    HourSlotView(
+                        hour: hour,
+                        date: viewModel.currentDate,
+                        events: eventsFor(hour: hour),
+                        tasks: viewModel.tasksFor(date: viewModel.currentDate),
+                        onTaskTap: onTaskTap,
+                        onEventTap: onEventTap
+                    )
+                }
+            }
+            .padding()
+        }
+    }
+    
+    private var hourSlots: [Int] {
+        Array(0..<24)
+    }
+    
+    private func eventsFor(hour: Int) -> [EventEntity] {
+        let calendar = Calendar.current
+        return viewModel.eventsFor(date: viewModel.currentDate).filter { event in
+            let eventHour = calendar.component(.hour, from: event.startDate)
+            return eventHour == hour
+        }
+    }
+}
+
+// MARK: - Week View
+struct WeekView: View {
+    @ObservedObject var viewModel: CalendarViewModel
+    let onTaskTap: (TaskEntity) -> Void
+    let onEventTap: (EventEntity) -> Void
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Weekday headers
+            HStack(spacing: 0) {
+                Text("Время")
+                    .font(DesignSystem.Typography.caption)
+                    .foregroundColor(DesignSystem.Colors.textSecondary)
+                    .frame(width: 60)
+                
+                ForEach(viewModel.calendarDays, id: \.self) { date in
+                    VStack(spacing: 2) {
+                        Text(weekdayName(for: date))
+                            .font(DesignSystem.Typography.caption)
+                            .foregroundColor(DesignSystem.Colors.textSecondary)
+                        
+                        Text("\(Calendar.current.component(.day, from: date))")
+                            .font(DesignSystem.Typography.body)
+                            .foregroundColor(
+                                Calendar.current.isDateInToday(date) ?
+                                DesignSystem.Colors.primaryBlue :
+                                DesignSystem.Colors.textPrimary
+                            )
+                            .fontWeight(Calendar.current.isDateInToday(date) ? .semibold : .regular)
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+            }
+            .padding(.horizontal)
+            .padding(.bottom, DesignSystem.Spacing.sm)
+            
+            // Week grid
+            ScrollView {
+                LazyVStack(spacing: 1) {
+                    ForEach(0..<24, id: \.self) { hour in
+                        WeekHourRowView(
+                            hour: hour,
+                            days: viewModel.calendarDays,
+                            viewModel: viewModel,
+                            onTaskTap: onTaskTap,
+                            onEventTap: onEventTap
+                        )
+                    }
+                }
+            }
+        }
+    }
+    
+    private func weekdayName(for date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ru_RU")
+        formatter.dateFormat = "EEE"
+        return formatter.string(from: date).capitalized
+    }
+}
+
+// MARK: - Month View
+struct MonthView: View {
+    @ObservedObject var viewModel: CalendarViewModel
+    let onDateTap: (Date) -> Void
+    
+    var body: some View {
+        VStack(spacing: DesignSystem.Spacing.sm) {
+            // Weekday headers
+            HStack(spacing: 0) {
+                ForEach(weekdayHeaders, id: \.self) { weekday in
+                    Text(weekday)
+                        .font(DesignSystem.Typography.caption)
+                        .foregroundColor(DesignSystem.Colors.textSecondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, DesignSystem.Spacing.xs)
+                }
+            }
+            .padding(.horizontal)
+            
+            // Calendar grid
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 7), spacing: 1) {
+                ForEach(viewModel.calendarDays, id: \.self) { date in
+                    MonthDayCell(
+                        date: date,
+                        isSelected: Calendar.current.isDate(date, inSameDayAs: viewModel.selectedDate),
+                        isToday: Calendar.current.isDate(date, inSameDayAs: Date()),
+                        isCurrentMonth: Calendar.current.isDate(date, equalTo: viewModel.currentDate, toGranularity: .month),
+                        hasItems: viewModel.hasItemsFor(date: date),
+                        taskCount: viewModel.taskCountFor(date: date)
+                    ) {
+                        onDateTap(date)
+                    }
+                }
+            }
+            .padding(.horizontal)
+            
+            Spacer()
+        }
+    }
+    
+    private var weekdayHeaders: [String] {
+        ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
+    }
+}
+
+// MARK: - Supporting Views
+
+struct HourSlotView: View {
+    let hour: Int
+    let date: Date
+    let events: [EventEntity]
+    let tasks: [TaskEntity]
+    let onTaskTap: (TaskEntity) -> Void
+    let onEventTap: (EventEntity) -> Void
+    
+    var body: some View {
+        HStack(alignment: .top, spacing: DesignSystem.Spacing.md) {
+            // Hour label
+            Text(String(format: "%02d:00", hour))
+                .font(DesignSystem.Typography.caption)
+                .foregroundColor(DesignSystem.Colors.textSecondary)
+                .frame(width: 50, alignment: .leading)
+                .padding(.top, 4)
+            
+            // Events and tasks
+            VStack(alignment: .leading, spacing: DesignSystem.Spacing.xs) {
+                ForEach(events, id: \.id) { event in
+                    EventRowView(event: event) {
+                        onEventTap(event)
+                    }
+                }
+                
+                if hour == 9 { // Show all-day tasks at 9 AM
+                    ForEach(tasks, id: \.id) { task in
+                        TaskRowView(task: task)
+                            .onTapGesture {
+                                onTaskTap(task)
+                            }
+                    }
+                }
+            }
+            
+            Spacer()
+        }
+        .padding(.vertical, 2)
+    }
+}
+
+struct WeekHourRowView: View {
+    let hour: Int
+    let days: [Date]
+    @ObservedObject var viewModel: CalendarViewModel
+    let onTaskTap: (TaskEntity) -> Void
+    let onEventTap: (EventEntity) -> Void
+    
+    var body: some View {
+        HStack(spacing: 1) {
+            // Hour label
+            Text(String(format: "%02d:00", hour))
+                .font(DesignSystem.Typography.caption)
+                .foregroundColor(DesignSystem.Colors.textSecondary)
+                .frame(width: 60)
+                .padding(.vertical, 8)
+            
+            // Day cells
+            ForEach(days, id: \.self) { date in
+                WeekDayHourCell(
+                    date: date,
+                    hour: hour,
+                    events: eventsFor(date: date, hour: hour),
+                    tasks: hour == 9 ? viewModel.tasksFor(date: date) : [],
+                    onTaskTap: onTaskTap,
+                    onEventTap: onEventTap
+                )
+            }
+        }
+        .background(DesignSystem.Colors.cardBackground)
+    }
+    
+    private func eventsFor(date: Date, hour: Int) -> [EventEntity] {
+        let calendar = Calendar.current
+        return viewModel.eventsFor(date: date).filter { event in
+            let eventHour = calendar.component(.hour, from: event.startDate)
+            return eventHour == hour
+        }
+    }
+}
+
+struct WeekDayHourCell: View {
+    let date: Date
+    let hour: Int
+    let events: [EventEntity]
+    let tasks: [TaskEntity]
+    let onTaskTap: (TaskEntity) -> Void
+    let onEventTap: (EventEntity) -> Void
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            ForEach(events, id: \.id) { event in
+                Text(event.title)
+                    .font(DesignSystem.Typography.caption)
+                    .foregroundColor(.white)
+                    .padding(2)
+                    .background(DesignSystem.Colors.primaryBlue)
+                    .cornerRadius(4)
+                    .onTapGesture {
+                        onEventTap(event)
+                    }
+            }
+            
+            ForEach(tasks, id: \.id) { task in
+                Text(task.title)
+                    .font(DesignSystem.Typography.caption)
+                    .foregroundColor(DesignSystem.Colors.primaryBlue)
+                    .padding(2)
+                    .background(DesignSystem.Colors.primaryBlue.opacity(0.1))
+                    .cornerRadius(4)
+                    .onTapGesture {
+                        onTaskTap(task)
+                    }
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 30, alignment: .leading)
+        .padding(2)
+        .background(Color.clear)
+    }
+}
+
+struct MonthDayCell: View {
+    let date: Date
+    let isSelected: Bool
+    let isToday: Bool
+    let isCurrentMonth: Bool
+    let hasItems: Bool
+    let taskCount: Int
+    let onTap: () -> Void
+    
+    var body: some View {
+        Button(action: onTap) {
+            VStack(spacing: 2) {
+                Text("\(Calendar.current.component(.day, from: date))")
+                    .font(DesignSystem.Typography.body)
+                    .fontWeight(isToday ? .semibold : .regular)
+                    .foregroundColor(dayTextColor)
+                
+                if hasItems {
+                    Circle()
+                        .fill(DesignSystem.Colors.primaryBlue)
+                        .frame(width: 6, height: 6)
+                }
+                
+                if taskCount > 0 {
+                    Text("\(taskCount)")
+                        .font(DesignSystem.Typography.caption)
+                        .foregroundColor(DesignSystem.Colors.primaryBlue)
+                }
+            }
+            .frame(minHeight: 44)
+            .frame(maxWidth: .infinity)
+            .background(backgroundColor)
+            .cornerRadius(8)
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+    
+    private var dayTextColor: Color {
+        if isToday {
+            return .white
+        } else if isCurrentMonth {
+            return DesignSystem.Colors.textPrimary
+        } else {
+            return DesignSystem.Colors.textTertiary
+        }
+    }
+    
+    private var backgroundColor: Color {
+        if isToday {
+            return DesignSystem.Colors.primaryBlue
+        } else if isSelected {
+            return DesignSystem.Colors.primaryBlue.opacity(0.2)
+        } else {
+            return DesignSystem.Colors.cardBackground
+        }
+    }
+}
+
+struct EventRowView: View {
+    let event: EventEntity
+    let onTap: () -> Void
+    
+    var body: some View {
+        Button(action: onTap) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(event.title)
+                        .font(DesignSystem.Typography.body)
+                        .foregroundColor(.white)
+                        .multilineTextAlignment(.leading)
+                    
+                    Text(timeString)
+                        .font(DesignSystem.Typography.caption)
+                        .foregroundColor(.white.opacity(0.8))
+                }
+                
+                Spacer()
+            }
+            .padding(8)
+            .background(DesignSystem.Colors.primaryBlue)
+            .cornerRadius(8)
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+    
+    private var timeString: String {
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        if event.isAllDay {
+            return "Весь день"
+        } else {
+            return "\(formatter.string(from: event.startDate)) - \(formatter.string(from: event.endDate))"
+        }
+    }
+}
+
+// Placeholder views - these would need full implementation
+struct EventDetailView: View {
+    let event: EventEntity
+    
+    var body: some View {
+        NavigationView {
+            VStack {
+                Text("Детали события")
+                    .font(.title)
+                Text(event.title)
+                    .font(.headline)
+                Spacer()
+            }
+            .navigationTitle("Событие")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+}

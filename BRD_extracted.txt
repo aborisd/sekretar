@@ -1,0 +1,663 @@
+Business Requirements Details (BRD) + План
+
+разработки
+
+1) Обзор и цели
+
+(см. BRD — без изменений)
+
+План разработки (M0→M3)
+
+M0 (Неделя 1–2): Подготовка и прототипирование
+
+• 
+
+Настройка проекта Xcode (SwiftUI + Core Data + EventKit).
+
+• 
+
+Черновой UI: пустые экраны Календарь, To‑Do, Чат.
+
+• 
+
+Архитектура данных (Core Data модели Task, Event, Project).
+
+• 
+
+Импорт read‑only из системного календаря (EventKit).
+
+• 
+
+Тестовая генерация данных для UI.
+
+M1 (Неделя 3–4): Базовый функционал
+
+• 
+
+Календарь: отображение по дням/неделям/месяцам.
+
+• 
+
+To‑Do: создание/редактирование/удаление задач.
+
+• 
+
+Связи между задачами и событиями.
+
+• 
+
+Локальное хранение и оффлайн‑режим.
+
+• 
+
+Локальные уведомления для дедлайнов.
+
+• 
+
+Базовые виджеты (Сегодня, Быстро добавить).
+
+M2 (Неделя 5–8): AI‑интеграция и расширенные функции
+
+• 
+
+Чат‑интерфейс с вводом текста/голоса.
+
+• 
+
+• 
+
+Подключение LLM (он‑девайс или API) → JSON интенты.
+Модуль валидации и предпросмотра действий AI.
+
+• 
+
+Автопланирование задач в свободные слоты календаря.
+
+• 
+
+Массовые операции с задачами.
+
+• 
+
+Улучшенные уведомления (умные напоминания).
+
+M3 (Неделя 9–12): MVP и тестирование
+
+• 
+
+Умные слоты времени и приоритезация.
+
+• 
+
+Оптимизация производительности рендеринга.
+
+• 
+
+Полный оффлайн‑функционал с синхронизацией при возврате в онлайн.
+
+• 
+
+Подготовка TestFlight: UX‑полировка, исправление багов.
+
+• 
+
+Экран «Политика конфиденциальности» и IAP для Pro.
+
+1
+
+Архитектура классов (упрощённо)
+
+Core Data Entities:
+
+  ProjectEntity
+
+  TaskEntity
+
+  EventEntity
+
+  UserPrefEntity
+
+  AIActionLogEntity
+
+SwiftUI Views:
+
+  CalendarView (DayView, WeekView, MonthView)
+
+  TaskListView
+
+  ChatView
+
+  SettingsView
+
+  WidgetViews (TodayWidget, QuickAddWidget)
+
+ViewModels:
+
+  CalendarViewModel
+
+  TaskListViewModel
+
+  ChatViewModel
+
+  SettingsViewModel
+
+Services:
+
+  EventKitService
+
+  NotificationService
+
+  AIIntentService (LLMClient + IntentParser)
+
+  AutoSchedulerService
+
+  AnalyticsService
+
+Чек‑листы по этапам
+
+M0 Checklist:
+
+-
+
+M1 Checklist:
+
+-
+
+M2 Checklist:
+
+-
+
+M3 Checklist:
+
+-
+
+2
+
+Архитектурные заметки AI‑сервиса
+
+• 
+
+• 
+
+AIIntentService получает текст/голос → LLM (он‑девайс или API) → JSON интент.
+IntentParser валидирует поля, проверяет конфликты.
+
+• 
+
+Результат отображается пользователю в предпросмотре.
+
+• 
+
+После подтверждения данные сохраняются в Core Data и EventKit.
+
+• 
+
+AIActionLog сохраняет все действия для undo/redo.
+
+План разработки (M0 → M3) + архитектура
+
+Технологический стек
+
+• 
+
+Язык/UI: Swift 5.10+, SwiftUI, Combine/Observation, async/await.
+
+• 
+
+Хранение: Core Data + NSPersistentCloudKitContainer (включим в v1.1), файловые вложения
+
+через FileManager.
+
+• 
+
+Календарь: EventKit / EventKitUI (минимум UI).
+
+• 
+
+Уведомления: UserNotifications + BGTaskScheduler.
+
+• 
+
+Виджеты: WidgetKit, App Intents/Shortcuts.
+
+• 
+
+• 
+
+Речь: Speech framework (on‑device где возможно).
+ИИ‑слой: абстракция  LLMProvider  (он‑девайс/облако переключаемо флагом).
+
+• 
+
+Аналитика: TelemetryDeck/own lightweight, в т.ч. App Store server notifications позже.
+
+• 
+
+CI/CD: Xcode Cloud или GitHub Actions + fastlane + TestFlight.
+
+Архитектура (слои)
+
+• 
+
+Presentation (SwiftUI) → ViewModels (Observable/State) → Domain (UseCases/Services) → 
+
+Data (Repositories: CoreDataRepo, EventKitRepo, AIRepo) → System (UNUserNotification,
+BGTask, Speech, App Intents).
+Ошибки и события через  AppEvents  (type‑safe), трекинг через  Analytics  фасад.
+
+• 
+
+Основные модули
+
+• 
+
+• 
+
+• 
+
+• 
+
+• 
+
+• 
+
+CalendarModule  (просмотры, создание/редактирование событий, конфликт‑чекер)
+TasksModule  (CRUD задач, приоритеты, чек‑листы, автопланирование)
+AIChatModule  (чат, парсинг интентов, предпросмотр действий)
+SyncModule  (импорт из EventKit; двусторонняя синхронизация в v1.1)
+NotificationsModule  (правила напоминаний, смарт‑повтор)
+WidgetsModule  (Сегодня/Следующая задача/Быстро добавить)
+
+Диаграмма классов (текстовая)
+
+• 
+
+• 
+
+Entities (Core Data): Project ,  Task ,  Event ,  UserPref ,  AIActionLog .
+ViewModels: DayViewModel ,  WeekViewModel ,  MonthViewModel ,  TaskListViewModel ,
+ChatViewModel ,  PlannerViewModel .
+
+3
+
+• 
+
+• 
+
+UseCases/Services: CreateTask ,  PlanTaskIntoCalendar ,  SuggestTimeSlots , 
+Prioritizer ,  AIIntentRouter ,  EventConflictChecker .
+Repositories: TaskRepositoryCD ,  EventRepositoryEK ,  PrefRepositoryCD , 
+AIRepository  (через  LLMProvider ).
+
+• 
+
+LLM Abstraction: LLMProvider  (protocol) → имплементации:  OnDeviceLLM ,  CloudLLM .
+
+Контракт AI (через JSON)
+
+Формат ответа ИИ:
+
+{
+
+"action": "createTask|updateTask|deleteTask|createEvent|updateEvent|
+
+deleteEvent|suggestTime|prioritize|summarize",
+
+"payload": { /* поля сущности */ },
+
+"meta": {"confidence": 0.0-1.0, "requiresConfirmation": true|false}
+
+}
+
+Примеры промптов системного уровня:
+
+• 
+
+"Ты помощник планирования. На основе пользовательской фразы верни ТОЛЬКО JSON по
+контракту…"
+
+• 
+
+"Не создавай объекты, если отсутствуют ключевые поля; запроси уточнение через
+
+requiresConfirmation=true".
+
+Алгоритм умных слотов (MVP)
+
+1. 
+
+Сформировать кандидаты из свободных окон (EventKit busy map + UserPref deepWork/
+
+quietHours).
+
+2. 
+
+Отфильтровать по длительности, дедлайну, приоритету.
+
+3. 
+
+Отсортировать: (приоритет P0>P1>P2>P3) → раньше дедлайн → внутри deepWork →
+меньшая фрагментация дня.
+
+4. 
+
+Предложить топ‑3, с предпросмотром и быстрым подтверждением.
+
+Performance Budgets
+
+• 
+
+Время создания сущности локально: < 300 мс.
+
+• 
+
+• 
+
+Рендер ленты задач и календаря: 60 FPS (расчёт layout ≤ 8 мс, drawing ≤ 8 мс).
+Ответ ИИ: on‑device < 2 с, облако < 5 с.
+
+4
+
+Планы по спринтам/этапам
+
+M0 (Недели 1–2): Фундамент
+
+Задачи:
+
+• 
+
+Скелет приложения (SwiftUI App, модульная структура), базовая навигация (Tab: Сегодня |
+
+Задачи | Календарь | Чат).
+
+• 
+
+Core Data модель + предикаты/фетч‑контроллеры.
+
+• 
+
+Репозитории для задач и событий (заглушка событий локально).
+
+• 
+
+Юнит‑тестирование основы, настройка CI (сборка + тесты). Демоусловия:
+
+• 
+
+Создание/редактирование/удаление задачи офлайн, персистентность.
+
+• 
+
+Просмотр календаря (заглушечные события). Риски/миты: миграции Core Data — сразу
+
+включить Lightweight Migration.
+
+M1 (Недели 3–5): Календарь и задачи с UX
+
+Задачи:
+
+• 
+
+Полноценный календарь (день/неделя/месяц), drag‑and‑drop событий.
+
+• 
+
+• 
+
+EventKit read‑only импорт (разрешения, маппинг EKEvent→Event).
+Конфликт‑чекер, повторяемость (RRULE базовые).
+
+• 
+
+To‑Do: чек‑листы, приоритеты, проекты, быстрые действия (swipe).
+
+• 
+
+Виджеты (Сегодня, Быстро добавить), локальные уведомления. Демоусловия:
+
+• 
+
+Импорт внешних событий виден в календаре; конфликт‑чекер предупреждает при
+
+наложении.
+
+• 
+
+Виджеты показывают актуальные данные; уведомления триггерятся.
+
+M2 (Недели 6–9): AI и автопланирование
+
+Задачи:
+
+• 
+
+Чат‑экран + история, микрофон, обработка распознавания речи.
+
+• 
+
+Интент‑роутинг и JSON‑контракт; предпросмотр изменений (sheet) + undo/redo.
+
+• 
+
+Алгоритм умных слотов + автопривязка задач к времени (опционально).
+
+• 
+
+App Intents/Shortcuts: «Добавь задачу», «Что сегодня?».
+
+• 
+
+Аналитика событий, базовый приоритезатор. Демоусловия:
+
+• 
+
+• 
+
+Фразы типа «Найди 2 часа до пятницы для отчёта» → 2–3 слота.
+Undo/Redo для действий ИИ, лог  AIActionLog .
+
+M3 (Недели 10–12): Полировка и MVP к TestFlight
+
+Задачи:
+
+• 
+
+Оффлайн‑очереди на изменения, маскирование PII для облака.
+
+• 
+
+Экран настроек приватности, экспорт/удаление данных (GDPR‑ready).
+
+• 
+
+Локализация RU/EN, доступность (Dynamic Type, VoiceOver), haptics.
+
+• 
+
+Crash/analytics мониторинг, подготовка к TestFlight, Privacy Labels. Демоусловия
+
+(критерии приёмки):
+
+• 
+
+Все user stories из BRD за ≤ 3 шага, стабильность, без потери данных при убийстве.
+
+5
+
+Чек‑листы по направлениям
+
+Календарь
+
+-
+
+To‑Do
+
+-
+
+ИИ
+
+-
+
+Интеграции
+
+-
+
+Качество
+
+-
+
+Миграция в v1.1
+
+• 
+
+Двусторонняя синхронизация EventKit/Google/Exchange через iOS аккаунты.
+
+• 
+
+CloudKit синк Core Data.
+
+• 
+
+Расширенный приоритезатор (взвешивание контекстов: местоположение, энергия,
+
+календарные «шаблоны»).
+
+Политики и приватность (GDPR)
+
+• 
+
+Экран управления данными: экспорт (.json), удаление.
+
+• 
+
+Минимизировать пересылку PII в облако (опция «Privacy Mode»: замаскированные имена
+
+→ placeholders).
+Data Processing Agreement (для облачного провайдера ИИ), лог хранения сроков.
+
+• 
+
+Инструменты разработчика
+
+• 
+
+Feature flags (UserDefaults + remote in v1.1).
+
+• 
+
+Debug меню: фейковые события/задачи, стресс‑генератор (5k объектов).
+
+• 
+
+Логи: os_log категории (AI, Sync, UI, Perf).
+
+6
+
+Метрики и аналитика (события)
+
+• 
+
+• 
+
+• 
+
+• 
+
+task_created  {via: manual|ai}
+event_created  {via: manual|ai, has_conflict: bool}
+ai_suggestion_accepted  {type: suggestTime|prioritize}
+reminder_missed  /  snooze
+
+• 
+
+Воронка: open_app → ai_prompt → preview → confirm → object_written
+
+App Store готовность (чек‑лист)
+
+-
+
+Тест‑план (детализация)
+
+• 
+
+Юнит: UseCases ( PlanTaskIntoCalendar ,  EventConflictChecker ), парсер интентов.
+
+• 
+
+UI: создание события/задачи, перенос dnd, предпросмотр ИИ.
+
+• 
+
+Нагрузочные: 5k объектов, скролл месяц/неделя, поиск.
+
+• 
+
+Регресс: чек‑листы, повторяемость, уведомления.
+
+• 
+
+Безопасность: подтверждения на удаление/массовые операции, undo/redo.
+
+Роли/ответственности (даже если соло)
+
+• 
+
+Tech Owner: архитектура, quality gates.
+
+• 
+
+Feature Dev: реализация модулей по этапам.
+
+• 
+
+QA (совмещено): сценарии и автотесты.
+
+• 
+
+PM (совмещено): приоритизация бэклога.
+
+Бэклог (top‑10 после MVP)
+
+1. 
+
+Шеринг календарей/проектов.
+
+2. 
+
+Расширенные повторения (сложные RRULE).
+
+3. 
+
+Интеграция с почтой/сообщениями (парсинг дат/встреч из текста).
+
+4. 
+
+Гео‑контекст (напомнить «когда рядом с магазином»).
+
+5. 
+
+Фокус‑режим интеграции (Apple Focus Filters).
+
+6. 
+
+Темплейты проектов.
+
+7. 
+
+iPad многопанельный UI + клавиатурные шорткаты/Command Palette.
+
+8. 
+
+Экспорт в .ics/.csv.
+
+9. 
+
+Обучение модели на персональных паттернах локально.
+
+10. 
+
+Веб‑дашборд (позже).
+
+7
+
+

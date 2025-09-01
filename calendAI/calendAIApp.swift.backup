@@ -1,0 +1,117 @@
+import SwiftUI
+import UserNotifications
+
+@main
+struct CalendAIApp: App {
+    let persistence = PersistenceController.shared
+
+    var body: some Scene {
+        WindowGroup {
+            SimpleMainView()
+                .environment(\.managedObjectContext, persistence.container.viewContext)
+        }
+    }
+}
+
+struct SimpleMainView: View {
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 30) {
+                // Header
+                VStack {
+                    Text("📱 calendAI")
+                        .font(.largeTitle)
+                        .fontWeight(.bold)
+                        .foregroundColor(.blue)
+                    
+                    Text("M0 Complete - iOS Calendar with AI")
+                        .font(.headline)
+                        .foregroundColor(.gray)
+                }
+                
+                // Status
+                VStack(spacing: 16) {
+                    StatusCard(
+                        title: "Project Status",
+                        value: "M0 Complete ✅",
+                        color: .green
+                    )
+                    
+                    StatusCard(
+                        title: "Next Phase",
+                        value: "M1 - Basic Calendar & Tasks",
+                        color: .blue
+                    )
+                    
+                    StatusCard(
+                        title: "Architecture",
+                        value: "SwiftUI + Core Data + EventKit",
+                        color: .purple
+                    )
+                }
+                
+                // Features List
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("🚀 M0 Completed Features:")
+                        .font(.title2)
+                        .fontWeight(.semibold)
+                    
+                    Group {
+                        MainFeatureRow(text: "✅ Xcode project setup with SwiftUI")
+                        MainFeatureRow(text: "✅ Core Data models (Task, Event, Project)")
+                        MainFeatureRow(text: "✅ EventKit calendar integration")
+                        MainFeatureRow(text: "✅ Notification system foundation")
+                        MainFeatureRow(text: "✅ AI Intent Service architecture")
+                        MainFeatureRow(text: "✅ Navigation and UI structure")
+                    }
+                }
+                
+                Spacer()
+                
+                Text("Ready for M1 Development! 🎉")
+                    .font(.headline)
+                    .foregroundColor(.blue)
+                    .padding()
+                    .background(Color.blue.opacity(0.1))
+                    .cornerRadius(12)
+            }
+            .padding()
+            .navigationTitle("calendAI Demo")
+        }
+    }
+}
+
+struct StatusCard: View {
+    let title: String
+    let value: String
+    let color: Color
+    
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Text(value)
+                    .font(.headline)
+                    .foregroundColor(color)
+            }
+            Spacer()
+        }
+        .padding()
+        .background(Color(.systemGray6))
+        .cornerRadius(12)
+    }
+}
+
+struct MainFeatureRow: View {
+    let text: String
+    
+    var body: some View {
+        HStack {
+            Text(text)
+                .font(.body)
+            Spacer()
+        }
+    }
+}
