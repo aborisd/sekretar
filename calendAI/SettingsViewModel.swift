@@ -48,6 +48,7 @@ class SettingsViewModel: ObservableObject {
     }
     
     enum AIProvider: String, CaseIterable, Identifiable {
+        case mlc = "mlc"          // On-device via MLC-LLM
         case openAI = "openai"
         case local = "local"
         case disabled = "disabled"
@@ -56,6 +57,7 @@ class SettingsViewModel: ObservableObject {
         
         var displayName: String {
             switch self {
+            case .mlc: return "MLC (он‑девайс)"
             case .openAI: return "OpenAI"
             case .local: return "Локальный ИИ"
             case .disabled: return "Отключен"
@@ -72,7 +74,8 @@ class SettingsViewModel: ObservableObject {
         notificationsEnabled = defaults.bool(forKey: "notifications_enabled") 
         selectedTheme = AppTheme(rawValue: defaults.string(forKey: "app_theme") ?? "system") ?? .system
         selectedLanguage = AppLanguage(rawValue: defaults.string(forKey: "app_language") ?? "ru") ?? .russian
-        selectedAIProvider = AIProvider(rawValue: defaults.string(forKey: "ai_provider") ?? "openai") ?? .openAI
+        // Default to MLC provider in dev
+        selectedAIProvider = AIProvider(rawValue: defaults.string(forKey: "ai_provider") ?? "mlc") ?? .mlc
         debugModeEnabled = defaults.bool(forKey: "debug_mode_enabled")
         
         if let workStartData = defaults.object(forKey: "work_hours_start") as? Date {

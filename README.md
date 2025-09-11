@@ -15,3 +15,8 @@ Lightweight SwiftUI iOS demo app with SPM module layout.
 ## Notes
 - Swift Package manifest `Package.swift` targets the `calendAI` folder and processes resources from there.
 - Backup files (`*.swift.backup`) are excluded from the app bundle.
+
+## MLC-LLM (On-Device) Integration
+- Config: `mlc-package-config.json`
+- Setup guide: `docs/MLC_SETUP.md`
+- Provider: `calendAI/MLCLLMProvider.swift` (falls back if MLCSwift not linked)

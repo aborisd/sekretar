@@ -15,7 +15,7 @@ final class AIIntentService: ObservableObject {
     private let context: NSManagedObjectContext
     
     init(context: NSManagedObjectContext = PersistenceController.shared.container.viewContext,
-         llmProvider: LLMProviderProtocol = EnhancedLLMProvider.shared) {
+         llmProvider: LLMProviderProtocol = AIProviderFactory.current()) {
         self.context = context
         self.llmProvider = llmProvider
     }

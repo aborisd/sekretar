@@ -10,6 +10,8 @@ struct calendAIApp: App {
             DemoContentView()
                 .environment(\.managedObjectContext, persistence.container.viewContext)
                 .onAppear {
+                    // Ensure we have a default model folder structure ready for MLC runtime
+                    ModelManager.shared.ensureDefaultModelIfMissing()
                     requestNotificationPermissions()
                 }
         }
