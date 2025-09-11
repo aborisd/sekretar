@@ -25,7 +25,7 @@ In the root of this repo (calendAI), we provide `mlc-package-config.json` with a
 
 ```
 # From the project root (calendAI)
-export MLC_LLM_SOURCE_DIR=/absolute/path/to/mlc-llm
+export MLC_LLM_SOURCE_DIR=$(pwd)/third_party/mlc-llm
 mlc_llm package
 ```
 
@@ -36,7 +36,7 @@ This creates `./dist/` with the following:
 3) Add MLCSwift package and link libraries
 ------------------------------------------
 
-- In Xcode add a local Swift package dependency pointing to `mlc-llm/ios/MLCSwift`.
+- In Xcode add a local Swift package dependency pointing to `third_party/mlc-llm/ios/MLCSwift` (we track mlc-llm as a submodule).
 - Target → Build Settings:
   - Library Search Paths: `$(PROJECT_DIR)/dist/lib`
   - Other Linker Flags:
@@ -56,4 +56,3 @@ Code Reference
 - Provider factory: `calendAI/AIProviderFactory.swift`
 - Settings toggle (.mlc): `calendAI/SettingsViewModel.swift`
 - Injection point: `calendAI/AIIntentService.swift`
-
