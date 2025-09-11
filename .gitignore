@@ -44,3 +44,8 @@ calendAI_M1_Complete_*.tar.gz
 # Local dev artifacts
 .selected_sim_udid
 .claude/
+dist/
+DerivedData/
+*.xcuserdatad
+*.xcworkspace/xcuserdata
+*.DS_Store
