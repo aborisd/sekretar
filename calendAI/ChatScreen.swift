@@ -17,6 +17,7 @@ final class ChatViewModel: ObservableObject {
     @Published var typing: Bool = false
 
     private let llm: LLMProviderProtocol = AIProviderFactory.current()
+    private var currentTask: Task<Void, Never>? = nil
 
     func send() {
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -26,7 +27,8 @@ final class ChatViewModel: ObservableObject {
         input = ""
         typing = true
 
-        Task { [weak self] in
+        currentTask?.cancel()
+        currentTask = Task { [weak self] in
             guard let self else { return }
             do {
                 let reply = try await llm.generateResponse(trimmed)
@@ -41,6 +43,12 @@ final class ChatViewModel: ObservableObject {
                 }
             }
         }
+    }
+
+    func stop() {
+        currentTask?.cancel()
+        currentTask = nil
+        typing = false
     }
 }
 
@@ -126,6 +134,15 @@ struct ChatScreen: View {
                             .stroke(Color.black.opacity(0.08))
                     )
                     .lineLimit(1...5)
+
+                if vm.typing {
+                    Button(action: vm.stop) {
+                        Image(systemName: "stop.circle.fill")
+                            .font(.system(size: 16, weight: .semibold))
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.red)
+                }
 
                 Button(action: vm.send) {
                     Image(systemName: "paperplane.fill")
