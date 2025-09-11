@@ -11,11 +11,12 @@ struct Message: Identifiable, Hashable {
 // MARK: - ViewModel
 final class ChatViewModel: ObservableObject {
     @Published var messages: [Message] = [
-        Message(text: "Привет! Я помогу спланировать день.", isUser: false),
-        Message(text: "Добавь встречу завтра в 10:00 — созвон с дизайнером", isUser: true)
+        Message(text: "Привет! Я помогу спланировать день.", isUser: false)
     ]
     @Published var input: String = ""
     @Published var typing: Bool = false
+
+    private let llm: LLMProviderProtocol = AIProviderFactory.current()
 
     func send() {
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -25,11 +26,20 @@ final class ChatViewModel: ObservableObject {
         input = ""
         typing = true
 
-        // Имитация ответа
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
-            guard let self = self else { return }
-            self.messages.append(.init(text: "Поняла. Могу создать событие и напоминание.", isUser: false))
-            self.typing = false
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let reply = try await llm.generateResponse(trimmed)
+                await MainActor.run {
+                    self.messages.append(.init(text: reply, isUser: false))
+                    self.typing = false
+                }
+            } catch {
+                await MainActor.run {
+                    self.messages.append(.init(text: "⚠️ Ошибка генерации ответа: \(error.localizedDescription)", isUser: false))
+                    self.typing = false
+                }
+            }
         }
     }
 }
