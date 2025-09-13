@@ -1,0 +1,22 @@
+version: "3.8"
+
+services:
+  llama:
+    image: ghcr.io/ggerganov/llama.cpp:full
+    container_name: llama-cpp
+    # Exposes an OpenAI-compatible server on :8000
+    command: >
+      --server
+      --port 8000
+      --ctx-size ${CTX_SIZE:-1024}
+      --n-gpu-layers 0
+      -m /models/${GGUF_MODEL}
+    volumes:
+      - ./models:/models
+    ports:
+      - "8000:8000"
+
+# Usage:
+# 1) Place a small GGUF model into ./models (e.g., TinyLlama .gguf) and set GGUF_MODEL=<filename>.
+# 2) docker compose -f docker-compose.cpu.yml up --pull=always --build
+

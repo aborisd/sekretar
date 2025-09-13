@@ -1,0 +1,25 @@
+version: "3.8"
+
+services:
+  vllm:
+    image: vllm/vllm-openai:latest
+    container_name: vllm
+    ports:
+      - "8000:8000"
+    environment:
+      - HF_TOKEN=${HF_TOKEN}
+    volumes:
+      - ./data/hf_cache:/root/.cache/huggingface
+    # If your Docker supports device reservations (NVIDIA on Linux)
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+    # For older Docker setups, uncomment the next line instead:
+    # runtime: nvidia
+    command: >
+      --model ${MODEL}
+      --max-model-len ${MAX_MODEL_LEN:-4096}
+      --gpu-memory-utilization ${GPU_MEMORY_UTILIZATION:-0.90}
+
