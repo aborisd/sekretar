@@ -2,18 +2,18 @@
 import PackageDescription
 
 let package = Package(
-    name: "calendAI",
+    name: "sekretar",
     defaultLocalization: "en", // или "ru"
     platforms: [
         .iOS(.v15),
         .macOS(.v12)
     ],
     products: [
-        .library(name: "calendAI", targets: ["calendAI"])
+        .library(name: "sekretar", targets: ["sekretar"])
     ],
     targets: [
         .target(
-            name: "calendAI",
+            name: "sekretar",
             // исходники лежат в папке "calendAI"
             path: "calendAI",
             // на всякий случай исключим файлы, которые точно не должны компилироваться
