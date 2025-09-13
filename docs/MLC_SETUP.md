@@ -1,13 +1,33 @@
 MLC-LLM Integration (iOS)
 =========================
 
-This app is pre-wired to support on-device LLM via MLC-LLM. Below are the steps to build the runtime/libs and link them in Xcode.
+This app is pre-wired to support on-device LLM via MLC-LLM. Below are safe, low‑friction steps to prepare the runtime/libs and link them in Xcode without building TVM from sources.
 
 Prerequisites
-- CMake >= 3.24
-- Git + Git LFS
-- Rust + Cargo
 - Xcode 15+
+- Git + Git LFS
+- Python 3.10+ and either `pipx` (recommended) or `pip`
+- Optional: CMake (only if you choose to build from sources; not required for the safe path)
+
+Safe install (no heavy TVM build)
+---------------------------------
+
+1) Install the CLI from prebuilt Python wheels (includes tvm runtime):
+
+```
+pipx install mlc-llm-nightly
+# or: pip install --user mlc-llm-nightly
+```
+
+2) Clone mlc-llm and init submodules (for MLCSwift only, this does not compile TVM):
+
+```
+git clone https://github.com/mlc-ai/mlc-llm.git
+cd mlc-llm
+git submodule update --init --recursive
+```
+
+You may add it as a submodule under `third_party/mlc-llm` in this repo for convenience.
 
 1) Clone mlc-llm and init submodules
 ------------------------------------
@@ -18,10 +38,12 @@ cd mlc-llm
 git submodule update --init --recursive
 ```
 
-2) Prepare `mlc_llm` package and build iOS runtime + model libs
-----------------------------------------------------------------
+2) Package iOS runtime + model libs
+-----------------------------------
 
-In the root of this repo (calendAI), we provide `mlc-package-config.json` with a small default model (Gemma 2B q4f16_1).
+In the root of this repo (calendAI) we provide `mlc-package-config.json` with a small default model.
+
+Tip: for the very first run you can pick the lightest model in config (e.g., TinyLlama 1.1B) to minimize packaging time and disk usage.
 
 ```
 # From the project root (calendAI)
@@ -32,6 +54,10 @@ mlc_llm package
 This creates `./dist/` with the following:
 - `dist/lib`: `libmlc_llm.a`, `libmodel_iphone.a`, `libtvm_runtime.a`, `libtokenizers_cpp.a`, `libsentencepiece.a`, `libtokenizers_c.a`
 - `dist/bundle`: `mlc-app-config.json` and (optionally) weights if you configured `bundle_weight: true`.
+
+Notes
+- No manual TVM build is required for this path.
+- If your machine runs hot during packaging, limit parallelism: `export CMAKE_BUILD_PARALLEL_LEVEL=2`.
 
 3) Add MLCSwift package and link libraries
 ------------------------------------------
