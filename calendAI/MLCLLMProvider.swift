@@ -23,7 +23,11 @@ final class MLCLLMProvider: LLMProviderProtocol {
         guard !isLoaded else { return }
         // Ensure we have some model directory and pick a model lib name
         ModelManager.shared.ensureDefaultModelIfMissing()
-        let modelPath = ModelManager.shared.pathForActiveModel()?.path ?? ""
+        var modelPath = ModelManager.shared.pathForActiveModel()?.path ?? ""
+        // Prefer bundled config if available (dist/bundle copied into app resources)
+        if let appConfig = Bundle.main.url(forResource: "mlc-app-config", withExtension: "json") {
+            modelPath = appConfig.deletingLastPathComponent().path
+        }
         // Default library name used by package unless overridden
         let modelLib = ModelManager.shared.activeModelLibName() ?? "model_iphone"
         await engine.reload(modelPath: modelPath, modelLib: modelLib)
