@@ -12,9 +12,15 @@ vLLM (GPU) quickstart
 1) Pick a GPU VM (RunPod, GCP, AWS) with NVIDIA GPU (L4/A10G/A100).
 2) Install NVIDIA drivers and Docker runtime (nvidia-container-toolkit).
 3) Copy `.env.sample` to `.env` and set at least `MODEL` (e.g. `mistralai/Mistral-7B-Instruct-v0.2`). Optionally set `HF_TOKEN`.
-4) Run:
+4) (Recommended) Set `API_KEY` to a strong random string. The server will require `Authorization: Bearer <API_KEY>`.
+5) Run:
    - `docker compose up -d`
-5) The API will be available at `http://<host>:8000/v1/chat/completions` (OpenAI-compatible).
+6) Test:
+   - `curl -H "Authorization: Bearer $API_KEY" http://<host>:8000/v1/models`
+   - `curl -H "Authorization: Bearer $API_KEY" -H 'Content-Type: application/json' \
+        -d '{"model":"'$MODEL'","messages":[{"role":"user","content":"Hello!"}]}' \
+        http://<host>:8000/v1/chat/completions`
+7) The API is available at `http://<host>:8000/v1/chat/completions` (OpenAI-compatible).
 
 llama.cpp (CPU) quickstart
 --------------------------
@@ -23,6 +29,11 @@ llama.cpp (CPU) quickstart
 3) Run: `docker compose -f docker-compose.cpu.yml up -d`.
 4) API will be available at `http://localhost:8000/v1/chat/completions`.
 
+Helper scripts (optional)
+-------------------------
+- `scripts/test.sh` — quick test against a base URL with API key.
+- `scripts/up.sh` / `scripts/down.sh` — bring stack up/down.
+
 Notes
 - For TLS and auth, put a reverse proxy (Caddy/Traefik/NGINX) in front and require an API key.
 - vLLM flags:
@@ -30,4 +41,3 @@ Notes
   - `--gpu-memory-utilization` controls VRAM usage headroom.
 - llama.cpp flags:
   - `--ctx-size` controls context length; `--n-gpu-layers 0` keeps it pure CPU.
-
