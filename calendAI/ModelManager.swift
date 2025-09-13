@@ -66,7 +66,7 @@ final class ModelManager: ObservableObject {
         return "model_iphone"
     }
 
-    func ensureDefaultModelIfMissing(id: String = "mlc-llama3-1b-q4f16_1") {
+    func ensureDefaultModelIfMissing(id: String = "tinyllama-1.1b-chat-v1.0-q4f16_1") {
         // Placeholder: in a later step, copy a bundled starter model if not present
         let modelURL = baseURL.appendingPathComponent(id, isDirectory: true)
         if !fm.fileExists(atPath: modelURL.path) {
