@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct MinimalCalendAIDemo: App {
+struct MinimalSekretarDemo: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
@@ -16,7 +16,7 @@ struct ContentView: View {
                 VStack(spacing: 30) {
                     // Header
                     VStack {
-                        Text("📅 calendAI")
+                        Text("📅 Sekretar")
                             .font(.largeTitle)
                             .fontWeight(.bold)
                             .foregroundColor(.blue)

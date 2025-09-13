@@ -135,7 +135,7 @@ final class EnhancedLLMProvider: LLMProviderProtocol {
     
     // Configuration
     private let systemPrompt = """
-        You are CalendAI, an intelligent personal assistant that helps users manage their tasks and schedule efficiently.
+        You are Sekretar, an intelligent personal assistant that helps users manage their tasks and schedule efficiently.
         
         Key capabilities:
         - Analyze tasks and suggest priorities, durations, and breakdowns

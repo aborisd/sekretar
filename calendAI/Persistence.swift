@@ -7,7 +7,7 @@ final class PersistenceController {
 
     init(inMemory: Bool = false) {
         let model = Self.makeModel()
-        container = NSPersistentContainer(name: "CalendAI", managedObjectModel: model)
+        container = NSPersistentContainer(name: "Sekretar", managedObjectModel: model)
         if inMemory {
             let description = NSPersistentStoreDescription()
             description.type = NSInMemoryStoreType

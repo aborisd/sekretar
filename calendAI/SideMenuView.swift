@@ -90,7 +90,7 @@ struct SideMenuView: View {
             Divider()
             
             HStack {
-                Text("CalendAI v1.0")
+                Text("Sekretar v1.0")
                     .font(DesignSystem.Typography.caption)
                     .foregroundColor(DesignSystem.Colors.textTertiary)
                 

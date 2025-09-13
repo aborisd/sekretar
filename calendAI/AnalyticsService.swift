@@ -29,7 +29,7 @@ enum AnalyticsEvent: String, CaseIterable {
 final class AnalyticsService: AnalyticsServiceProtocol {
     static let shared = AnalyticsService()
     
-    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "calendAI", category: "Analytics")
+    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "sekretar", category: "Analytics")
     private var userProperties: [String: Any] = [:]
     private var eventQueue: [(event: AnalyticsEvent, properties: [String: Any], timestamp: Date)] = []
     private let maxQueueSize = 100

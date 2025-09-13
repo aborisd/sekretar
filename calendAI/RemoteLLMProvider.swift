@@ -62,7 +62,7 @@ final class RemoteLLMProvider: LLMProviderProtocol {
             req.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         }
 
-        let system = "You are CalendAI, a helpful planning assistant. Be concise and actionable."
+        let system = "You are Sekretar, a helpful planning assistant. Be concise and actionable."
         let body = ChatRequest(
             model: model,
             messages: [
@@ -109,4 +109,3 @@ final class RemoteLLMProvider: LLMProviderProtocol {
         return try await EnhancedLLMProvider.shared.detectIntent(input)
     }
 }
-

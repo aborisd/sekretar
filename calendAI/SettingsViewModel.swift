@@ -142,7 +142,7 @@ class SettingsViewModel: ObservableObject {
     func exportUserData() -> URL? {
         // Export user data for backup
         let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let exportURL = documentsPath.appendingPathComponent("calendai_backup_\(Date().timeIntervalSince1970).json")
+        let exportURL = documentsPath.appendingPathComponent("sekretar_backup_\(Date().timeIntervalSince1970).json")
         
         do {
             let backup = createBackupData()

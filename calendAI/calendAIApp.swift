@@ -2,7 +2,7 @@ import SwiftUI
 import UserNotifications
 
 @main
-struct calendAIApp: App {
+struct SekretarApp: App {
     let persistence = PersistenceController.shared
 
     var body: some Scene {
