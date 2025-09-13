@@ -35,11 +35,18 @@ final class ChatViewModel: ObservableObject {
                 await MainActor.run {
                     self.messages.append(.init(text: reply, isUser: false))
                     self.typing = false
+                    self.currentTask = nil
+                }
+            } catch is CancellationError {
+                await MainActor.run {
+                    self.typing = false
+                    self.currentTask = nil
                 }
             } catch {
                 await MainActor.run {
                     self.messages.append(.init(text: "⚠️ Ошибка генерации ответа: \(error.localizedDescription)", isUser: false))
                     self.typing = false
+                    self.currentTask = nil
                 }
             }
         }
