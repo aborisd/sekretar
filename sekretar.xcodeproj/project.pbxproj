@@ -75,14 +75,14 @@
 			path = sekretar;
 			sourceTree = "<group>";
 		};
-		71C9C78E2E4A2A4B00AAA75D /* calendAITests */ = {
+		71C9C78E2E4A2A4B00AAA75D /* sekretarTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = calendAITests;
+			path = sekretarTests;
 			sourceTree = "<group>";
 		};
-		71C9C7982E4A2A4B00AAA75D /* calendAIUITests */ = {
+		71C9C7982E4A2A4B00AAA75D /* sekretarUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = calendAIUITests;
+			path = sekretarUITests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -117,8 +117,8 @@
 			children = (
 				71C9C7EC2E4B86B500AAA75D /* Untitled.swift */,
 				71C9C77B2E4A2A4800AAA75D /* calendAI */,
-				71C9C78E2E4A2A4B00AAA75D /* calendAITests */,
-				71C9C7982E4A2A4B00AAA75D /* calendAIUITests */,
+				71C9C78E2E4A2A4B00AAA75D /* sekretarTests */,
+				71C9C7982E4A2A4B00AAA75D /* sekretarUITests */,
 				71C9C77A2E4A2A4800AAA75D /* Products */,
 			);
 			sourceTree = "<group>";
@@ -172,7 +172,7 @@
 				71C9C78D2E4A2A4B00AAA75D /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				71C9C78E2E4A2A4B00AAA75D /* calendAITests */,
+				71C9C78E2E4A2A4B00AAA75D /* sekretarTests */,
 			);
 			name = sekretarTests;
 			packageProductDependencies = (
@@ -195,7 +195,7 @@
 				71C9C7972E4A2A4B00AAA75D /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				71C9C7982E4A2A4B00AAA75D /* calendAIUITests */,
+				71C9C7982E4A2A4B00AAA75D /* sekretarUITests */,
 			);
 			name = sekretarUITests;
 			packageProductDependencies = (
