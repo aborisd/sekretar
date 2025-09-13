@@ -77,8 +77,8 @@ Notes
 Build and run on a Simulator or Device. The provider `MLCLLMProvider` will attempt to load the engine when `MLCSwift` is available. Until then, it falls back to a local heuristic provider.
 
 Code Reference
-- Provider skeleton: `calendAI/MLCLLMProvider.swift`
-- Model manager: `calendAI/ModelManager.swift`
-- Provider factory: `calendAI/AIProviderFactory.swift`
-- Settings toggle (.mlc): `calendAI/SettingsViewModel.swift`
-- Injection point: `calendAI/AIIntentService.swift`
+- Provider skeleton: `sekretar/MLCLLMProvider.swift`
+- Model manager: `sekretar/ModelManager.swift`
+- Provider factory: `sekretar/AIProviderFactory.swift`
+- Settings toggle (.mlc): `sekretar/SettingsViewModel.swift`
+- Injection point: `sekretar/AIIntentService.swift`

@@ -72,7 +72,7 @@
 				Entities.swift = sourcecode.swift;
 				TaskEditorView.swift = sourcecode.swift;
 			};
-			path = calendAI;
+			path = sekretar;
 			sourceTree = "<group>";
 		};
 		71C9C78E2E4A2A4B00AAA75D /* calendAITests */ = {

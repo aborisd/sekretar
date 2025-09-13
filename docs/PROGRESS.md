@@ -23,5 +23,4 @@ In Progress / Next
 References
 - Setup: `docs/MLC_SETUP.md`
 - Config: `mlc-package-config.json`
-- Code: `calendAI/MLCLLMProvider.swift`, `calendAI/ModelManager.swift`, `calendAI/AIProviderFactory.swift`, `calendAI/AIIntentService.swift`
-
+- Code: `sekretar/MLCLLMProvider.swift`, `sekretar/ModelManager.swift`, `sekretar/AIProviderFactory.swift`, `sekretar/AIIntentService.swift`
