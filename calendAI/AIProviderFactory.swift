@@ -12,6 +12,8 @@ enum AIProviderFactory {
         switch rawValue {
         case "mlc":
             return MLCLLMProvider.shared
+        case "remote":
+            return RemoteLLMProvider.shared
         case "local":
             return EnhancedLLMProvider.shared
         case "openai":
@@ -25,4 +27,3 @@ enum AIProviderFactory {
         }
     }
 }
-

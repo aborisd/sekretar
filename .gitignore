@@ -49,3 +49,6 @@ DerivedData/
 *.xcuserdatad
 *.xcworkspace/xcuserdata
 *.DS_Store
+
+# Server
+server/.env
