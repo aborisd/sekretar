@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>REMOTE_LLM_BASE_URL</key>
+    <string>http://localhost:8000</string>
+    <key>REMOTE_LLM_MODEL</key>
+    <string>mistralai/Mistral-7B-Instruct-v0.2</string>
+    <key>REMOTE_LLM_API_KEY</key>
+    <string></string>
+</dict>
+</plist>
