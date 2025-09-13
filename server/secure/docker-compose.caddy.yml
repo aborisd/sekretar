@@ -1,0 +1,42 @@
+version: "3.8"
+
+services:
+  vllm:
+    image: vllm/vllm-openai:latest
+    container_name: vllm
+    environment:
+      - HF_TOKEN=${HF_TOKEN}
+    volumes:
+      - ../data/hf_cache:/root/.cache/huggingface
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+    command: >
+      --model ${MODEL}
+      --max-model-len ${MAX_MODEL_LEN:-4096}
+      --gpu-memory-utilization ${GPU_MEMORY_UTILIZATION:-0.90}
+      --api-key ${API_KEY}
+
+  caddy:
+    image: caddy:2
+    container_name: caddy
+    depends_on:
+      - vllm
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - DOMAIN=${DOMAIN}
+      - API_KEY=${API_KEY}
+      - ACME_EMAIL=${ACME_EMAIL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:
+

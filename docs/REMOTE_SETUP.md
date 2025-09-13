@@ -9,6 +9,7 @@ Option A — vLLM (GPU)
 2) Install NVIDIA drivers and nvidia-container-toolkit.
 3) In `server/`:
    - Copy `.env.sample` to `.env` and set `MODEL` (e.g., `mistralai/Mistral-7B-Instruct-v0.2`). Optionally set `HF_TOKEN`.
+   - (Recommended) Set `API_KEY` to a strong random string — vLLM will require `Authorization: Bearer <API_KEY>`.
    - Run `docker compose up -d`.
 4) Verify: `curl http://<host>:8000/v1/models`.
 5) API endpoint: `http://<host>:8000/v1/chat/completions`.
@@ -34,3 +35,11 @@ Notes
 - Streaming: current remote provider uses non-streamed responses; we can add SSE streaming later.
 - Security: front vLLM with a reverse proxy (TLS, API key) before exposing to the internet.
 
+TLS + API key (production-ready sketch)
+--------------------------------------
+1) Point a domain (e.g., `llm.example.com`) to your VM public IP.
+2) In `server/secure/`:
+   - Copy `.env.sample` to `.env` and set `DOMAIN`, `ACME_EMAIL`, `API_KEY` and `MODEL`.
+   - Run: `docker compose -f docker-compose.caddy.yml --env-file .env up -d`.
+3) Caddy issues TLS via Let’s Encrypt and proxies `https://$DOMAIN` → `vllm:8000`.
+4) Client must send `Authorization: Bearer <API_KEY>`.
