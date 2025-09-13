@@ -2,7 +2,7 @@ import SwiftUI
 import UserNotifications
 
 @main
-struct CalendAIApp: App {
+struct SekretarBackupApp: App {
     let persistence = PersistenceController.shared
 
     var body: some Scene {
@@ -19,7 +19,7 @@ struct SimpleMainView: View {
             VStack(spacing: 30) {
                 // Header
                 VStack {
-                    Text("📱 calendAI")
+                    Text("📱 Sekretar")
                         .font(.largeTitle)
                         .fontWeight(.bold)
                         .foregroundColor(.blue)
@@ -76,7 +76,7 @@ struct SimpleMainView: View {
                     .cornerRadius(12)
             }
             .padding()
-            .navigationTitle("calendAI Demo")
+            .navigationTitle("Sekretar Demo")
         }
     }
 }
