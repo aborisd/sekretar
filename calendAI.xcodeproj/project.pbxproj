@@ -12,21 +12,21 @@
 			containerPortal = 71C9C7712E4A2A4800AAA75D /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = 71C9C7782E4A2A4800AAA75D;
-			remoteInfo = calendAI;
+			remoteInfo = sekretar;
 		};
 		71C9C7962E4A2A4B00AAA75D /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 71C9C7712E4A2A4800AAA75D /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = 71C9C7782E4A2A4800AAA75D;
-			remoteInfo = calendAI;
+			remoteInfo = sekretar;
 		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		71C9C7792E4A2A4800AAA75D /* calendAI.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = calendAI.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		71C9C78B2E4A2A4B00AAA75D /* calendAITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = calendAITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		71C9C7952E4A2A4B00AAA75D /* calendAIUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = calendAIUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		71C9C7792E4A2A4800AAA75D /* sekretar.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = sekretar.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		71C9C78B2E4A2A4B00AAA75D /* sekretarTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = sekretarTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		71C9C7952E4A2A4B00AAA75D /* sekretarUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = sekretarUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		71C9C7EC2E4B86B500AAA75D /* Untitled.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Untitled.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -126,9 +126,9 @@
 		71C9C77A2E4A2A4800AAA75D /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				71C9C7792E4A2A4800AAA75D /* calendAI.app */,
-				71C9C78B2E4A2A4B00AAA75D /* calendAITests.xctest */,
-				71C9C7952E4A2A4B00AAA75D /* calendAIUITests.xctest */,
+				71C9C7792E4A2A4800AAA75D /* sekretar.app */,
+				71C9C78B2E4A2A4B00AAA75D /* sekretarTests.xctest */,
+				71C9C7952E4A2A4B00AAA75D /* sekretarUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -136,9 +136,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		71C9C7782E4A2A4800AAA75D /* calendAI */ = {
+		71C9C7782E4A2A4800AAA75D /* sekretar */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 71C9C79F2E4A2A4B00AAA75D /* Build configuration list for PBXNativeTarget "calendAI" */;
+			buildConfigurationList = 71C9C79F2E4A2A4B00AAA75D /* Build configuration list for PBXNativeTarget "sekretar" */;
 			buildPhases = (
 				71C9C7752E4A2A4800AAA75D /* Sources */,
 				71C9C7762E4A2A4800AAA75D /* Frameworks */,
@@ -151,16 +151,16 @@
 			fileSystemSynchronizedGroups = (
 				71C9C77B2E4A2A4800AAA75D /* calendAI */,
 			);
-			name = calendAI;
+			name = sekretar;
 			packageProductDependencies = (
 			);
-			productName = calendAI;
-			productReference = 71C9C7792E4A2A4800AAA75D /* calendAI.app */;
+			productName = sekretar;
+			productReference = 71C9C7792E4A2A4800AAA75D /* sekretar.app */;
 			productType = "com.apple.product-type.application";
 		};
-		71C9C78A2E4A2A4B00AAA75D /* calendAITests */ = {
+		71C9C78A2E4A2A4B00AAA75D /* sekretarTests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 71C9C7A22E4A2A4B00AAA75D /* Build configuration list for PBXNativeTarget "calendAITests" */;
+			buildConfigurationList = 71C9C7A22E4A2A4B00AAA75D /* Build configuration list for PBXNativeTarget "sekretarTests" */;
 			buildPhases = (
 				71C9C7872E4A2A4B00AAA75D /* Sources */,
 				71C9C7882E4A2A4B00AAA75D /* Frameworks */,
@@ -174,16 +174,16 @@
 			fileSystemSynchronizedGroups = (
 				71C9C78E2E4A2A4B00AAA75D /* calendAITests */,
 			);
-			name = calendAITests;
+			name = sekretarTests;
 			packageProductDependencies = (
 			);
-			productName = calendAITests;
-			productReference = 71C9C78B2E4A2A4B00AAA75D /* calendAITests.xctest */;
+			productName = sekretarTests;
+			productReference = 71C9C78B2E4A2A4B00AAA75D /* sekretarTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
-		71C9C7942E4A2A4B00AAA75D /* calendAIUITests */ = {
+		71C9C7942E4A2A4B00AAA75D /* sekretarUITests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 71C9C7A52E4A2A4B00AAA75D /* Build configuration list for PBXNativeTarget "calendAIUITests" */;
+			buildConfigurationList = 71C9C7A52E4A2A4B00AAA75D /* Build configuration list for PBXNativeTarget "sekretarUITests" */;
 			buildPhases = (
 				71C9C7912E4A2A4B00AAA75D /* Sources */,
 				71C9C7922E4A2A4B00AAA75D /* Frameworks */,
@@ -197,11 +197,11 @@
 			fileSystemSynchronizedGroups = (
 				71C9C7982E4A2A4B00AAA75D /* calendAIUITests */,
 			);
-			name = calendAIUITests;
+			name = sekretarUITests;
 			packageProductDependencies = (
 			);
-			productName = calendAIUITests;
-			productReference = 71C9C7952E4A2A4B00AAA75D /* calendAIUITests.xctest */;
+			productName = sekretarUITests;
+			productReference = 71C9C7952E4A2A4B00AAA75D /* sekretarUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
 /* End PBXNativeTarget section */
@@ -227,7 +227,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 71C9C7742E4A2A4800AAA75D /* Build configuration list for PBXProject "calendAI" */;
+			buildConfigurationList = 71C9C7742E4A2A4800AAA75D /* Build configuration list for PBXProject "sekretar" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -242,9 +242,9 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				71C9C7782E4A2A4800AAA75D /* calendAI */,
-				71C9C78A2E4A2A4B00AAA75D /* calendAITests */,
-				71C9C7942E4A2A4B00AAA75D /* calendAIUITests */,
+				71C9C7782E4A2A4800AAA75D /* sekretar */,
+				71C9C78A2E4A2A4B00AAA75D /* sekretarTests */,
+				71C9C7942E4A2A4B00AAA75D /* sekretarUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -300,12 +300,12 @@
 /* Begin PBXTargetDependency section */
 		71C9C78D2E4A2A4B00AAA75D /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 71C9C7782E4A2A4800AAA75D /* calendAI */;
+			target = 71C9C7782E4A2A4800AAA75D /* sekretar */;
 			targetProxy = 71C9C78C2E4A2A4B00AAA75D /* PBXContainerItemProxy */;
 		};
 		71C9C7972E4A2A4B00AAA75D /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 71C9C7782E4A2A4800AAA75D /* calendAI */;
+			target = 71C9C7782E4A2A4800AAA75D /* sekretar */;
 			targetProxy = 71C9C7962E4A2A4B00AAA75D /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
@@ -453,8 +453,8 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.aka.calendai;
-				PRODUCT_NAME = calendAI;
+				PRODUCT_BUNDLE_IDENTIFIER = com.aka.sekretar;
+				PRODUCT_NAME = sekretar;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -501,12 +501,12 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = aka.calendAITests;
+				PRODUCT_BUNDLE_IDENTIFIER = aka.sekretarTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/calendAI.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/calendAI";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/sekretar.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/sekretar";
 			};
 			name = Debug;
 		};
@@ -519,12 +519,12 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = aka.calendAITests;
+				PRODUCT_BUNDLE_IDENTIFIER = aka.sekretarTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/calendAI.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/calendAI";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/sekretar.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/sekretar";
 			};
 			name = Release;
 		};
@@ -535,12 +535,12 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = aka.calendAIUITests;
+				PRODUCT_BUNDLE_IDENTIFIER = aka.sekretarUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_TARGET_NAME = calendAI;
+				TEST_TARGET_NAME = sekretar;
 			};
 			name = Debug;
 		};
@@ -551,19 +551,19 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = aka.calendAIUITests;
+				PRODUCT_BUNDLE_IDENTIFIER = aka.sekretarUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_TARGET_NAME = calendAI;
+				TEST_TARGET_NAME = sekretar;
 			};
 			name = Release;
 		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		71C9C7742E4A2A4800AAA75D /* Build configuration list for PBXProject "calendAI" */ = {
+		71C9C7742E4A2A4800AAA75D /* Build configuration list for PBXProject "sekretar" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				71C9C79D2E4A2A4B00AAA75D /* Debug */,
@@ -572,7 +572,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		71C9C79F2E4A2A4B00AAA75D /* Build configuration list for PBXNativeTarget "calendAI" */ = {
+		71C9C79F2E4A2A4B00AAA75D /* Build configuration list for PBXNativeTarget "sekretar" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				71C9C7A02E4A2A4B00AAA75D /* Debug */,
@@ -581,7 +581,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		71C9C7A22E4A2A4B00AAA75D /* Build configuration list for PBXNativeTarget "calendAITests" */ = {
+		71C9C7A22E4A2A4B00AAA75D /* Build configuration list for PBXNativeTarget "sekretarTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				71C9C7A32E4A2A4B00AAA75D /* Debug */,
@@ -590,7 +590,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		71C9C7A52E4A2A4B00AAA75D /* Build configuration list for PBXNativeTarget "calendAIUITests" */ = {
+		71C9C7A52E4A2A4B00AAA75D /* Build configuration list for PBXNativeTarget "sekretarUITests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				71C9C7A62E4A2A4B00AAA75D /* Debug */,

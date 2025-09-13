@@ -1,8 +1,8 @@
 import Testing
-@testable import calendAI
+@testable import sekretar
 import CoreData
 
-struct calendAITests {
+struct sekretarTests {
     
     @Test func testTaskRepositoryCreate() async throws {
         let context = PersistenceController(inMemory: true).container.viewContext
