@@ -39,7 +39,7 @@ Carthage/
 *.code-workspace
 
 # Local artifact bundle
-calendAI_M1_Complete_*.tar.gz
+sekretar_M1_Complete_*.tar.gz
 
 # Local dev artifacts
 .selected_sim_udid

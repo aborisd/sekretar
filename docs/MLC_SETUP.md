@@ -41,12 +41,12 @@ git submodule update --init --recursive
 2) Package iOS runtime + model libs
 -----------------------------------
 
-In the root of this repo (calendAI) we provide `mlc-package-config.json` with a small default model.
+In the root of this repo (sekretar) we provide `mlc-package-config.json` with a small default model.
 
 Tip: for the very first run you can pick the lightest model in config (e.g., TinyLlama 1.1B) to minimize packaging time and disk usage.
 
 ```
-# From the project root (calendAI)
+# From the project root (sekretar)
 export MLC_LLM_SOURCE_DIR=$(pwd)/third_party/mlc-llm
 mlc_llm package
 ```

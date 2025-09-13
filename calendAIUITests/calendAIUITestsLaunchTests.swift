@@ -1,6 +1,6 @@
 //
-//  calendAIUITestsLaunchTests.swift
-//  calendAIUITests
+//  sekretarUITestsLaunchTests.swift
+//  sekretarUITests
 //
 //  Created by Борис Алехин on 11.08.2025.
 //
