@@ -38,6 +38,7 @@ final class MLCLLMProvider: LLMProviderProtocol {
         for await res in await engine.chat.completions.create(
             messages: [ChatCompletionMessage(role: .user, content: prompt)]
         ) {
+            try Task.checkCancellation()
             if let delta = res.choices.first?.delta.content?.asText() {
                 text += delta
             }
