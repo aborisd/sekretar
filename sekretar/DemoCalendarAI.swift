@@ -17,55 +17,54 @@ struct DemoContentView: View {
     @State private var showChat = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Swipeable pages
-            TabView(selection: $selectedTab) {
-                // Вкладка "Главная" с плавающей кнопкой чата
-                NavigationView {
-                    ZStack {
+        ZStack { // Overlay кнопку чата поверх TabBar, чтобы она не пряталась на маленьких экранах
+            VStack(spacing: 0) {
+                // Swipeable pages
+                TabView(selection: $selectedTab) {
+                    // Вкладка "Главная"
+                    NavigationView {
                         Color(UIColor.systemBackground)
                             .ignoresSafeArea()
-
-                        // Здесь можно добавить контент главного экрана позже
-
-                        // Floating Chat Button (bottom-right)
-                        VStack {
-                            Spacer()
-                            HStack {
-                                Spacer()
-                                Button(action: { showChat = true }) {
-                                    Image(systemName: "bubble.left.and.bubble.right.fill")
-                                        .font(.system(size: 20, weight: .semibold))
-                                        .foregroundColor(.white)
-                                        .padding(16)
-                                        .background(
-                                            Circle()
-                                                .fill(DesignSystem.Colors.primaryBlue)
-                                                .shadow(color: Color.black.opacity(0.2), radius: 6, x: 0, y: 3)
-                                        )
-                                }
-                                .accessibilityLabel("Открыть чат с ИИ")
-                                .padding(.trailing, 20)
-                                .padding(.bottom, 28)
-                            }
-                        }
                     }
-                    .navigationBarTitleDisplayMode(.inline)
+                    .navigationViewStyle(.stack)
+                    .tag(0)
+
+                    // Вкладка "Календарь"
+                    CalendarView()
+                        .tag(1)
+
+                    // Вкладка "Задачи"
+                    TaskListView(viewModel: TaskListViewModel(repo: TaskRepositoryCD(context: context)))
+                        .tag(2)
                 }
-                .tag(0)
+                .tabViewStyle(.page(indexDisplayMode: .never)) // свайп между разделами
 
-                // Вкладка "Календарь"
-                CalendarView()
-                    .tag(1)
-
-                // Вкладка "Задачи"
-                TaskListView(viewModel: TaskListViewModel(repo: TaskRepositoryCD(context: context)))
-                    .tag(2)
+                // Custom bottom toolbar to switch tabs
+                CustomTabBar(selected: $selectedTab)
             }
-            .tabViewStyle(.page(indexDisplayMode: .never)) // свайп между разделами
 
-            // Custom bottom toolbar to switch tabs
-            CustomTabBar(selected: $selectedTab)
+            // Floating Chat Button (always visible above the toolbar)
+            VStack {
+                Spacer()
+                HStack {
+                    Spacer()
+                    Button(action: { showChat = true }) {
+                        Image(systemName: "bubble.left.and.bubble.right.fill")
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundColor(.white)
+                            .padding(16)
+                            .background(
+                                Circle()
+                                    .fill(DesignSystem.Colors.primaryBlue)
+                                    .shadow(color: Color.black.opacity(0.25), radius: 8, x: 0, y: 4)
+                            )
+                    }
+                    .accessibilityLabel("Открыть чат с ИИ")
+                    .padding(.trailing, 20)
+                    .padding(.bottom, 84) // поднять над нижним таббаром на iPhone SE
+                }
+            }
+            .allowsHitTesting(true)
         }
         .sheet(isPresented: $showChat) {
             NavigationView { ChatScreen() }
