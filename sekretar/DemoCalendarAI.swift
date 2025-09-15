@@ -30,12 +30,18 @@ struct DemoContentView: View {
                     .tag(0)
 
                     // Вкладка "Календарь"
-                    CalendarView()
-                        .tag(1)
+                    NavigationView {
+                        CalendarView()
+                    }
+                    .navigationViewStyle(.stack)
+                    .tag(1)
 
                     // Вкладка "Задачи"
-                    TaskListView(viewModel: TaskListViewModel(repo: TaskRepositoryCD(context: context)))
-                        .tag(2)
+                    NavigationView {
+                        TaskListView(viewModel: TaskListViewModel(repo: TaskRepositoryCD(context: context)))
+                    }
+                    .navigationViewStyle(.stack)
+                    .tag(2)
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never)) // свайп между разделами
 
@@ -43,28 +49,30 @@ struct DemoContentView: View {
                 CustomTabBar(selected: $selectedTab)
             }
 
-            // Floating Chat Button (always visible above the toolbar)
-            VStack {
-                Spacer()
-                HStack {
+            // Floating Chat Button: только на Главной (selectedTab == 0)
+            if selectedTab == 0 {
+                VStack {
                     Spacer()
-                    Button(action: { showChat = true }) {
-                        Image(systemName: "bubble.left.and.bubble.right.fill")
-                            .font(.system(size: 20, weight: .semibold))
-                            .foregroundColor(.white)
-                            .padding(16)
-                            .background(
-                                Circle()
-                                    .fill(DesignSystem.Colors.primaryBlue)
-                                    .shadow(color: Color.black.opacity(0.25), radius: 8, x: 0, y: 4)
-                            )
+                    HStack {
+                        Spacer()
+                        Button(action: { showChat = true }) {
+                            Image(systemName: "bubble.left.and.bubble.right.fill")
+                                .font(.system(size: 20, weight: .semibold))
+                                .foregroundColor(.white)
+                                .padding(16)
+                                .background(
+                                    Circle()
+                                        .fill(DesignSystem.Colors.primaryBlue)
+                                        .shadow(color: Color.black.opacity(0.25), radius: 8, x: 0, y: 4)
+                                )
+                        }
+                        .accessibilityLabel("Открыть чат с ИИ")
+                        .padding(.trailing, 20)
+                        .padding(.bottom, 84) // над таббаром на компактных iPhone
                     }
-                    .accessibilityLabel("Открыть чат с ИИ")
-                    .padding(.trailing, 20)
-                    .padding(.bottom, 84) // поднять над нижним таббаром на iPhone SE
                 }
+                .allowsHitTesting(true)
             }
-            .allowsHitTesting(true)
         }
         .sheet(isPresented: $showChat) {
             NavigationView { ChatScreen() }
