@@ -16,6 +16,10 @@ Option A — OpenRouter (10 minutes)
    - REMOTE_LLM_BASE_URL = https://openrouter.ai/api
    - REMOTE_LLM_MODEL = <your model, e.g., meta-llama/llama-3.1-8b-instruct>
    - REMOTE_LLM_API_KEY = <your OpenRouter key>
+   - (optional) REMOTE_LLM_MAX_TOKENS = 256..512
+   - (optional) REMOTE_LLM_TEMPERATURE = 0.5..0.7
+   - (optional, etiquette) REMOTE_LLM_HTTP_REFERER = https://<your-site-or-repo>
+   - (optional, etiquette) REMOTE_LLM_HTTP_TITLE = Sekretar
    - Switch provider once: UserDefaults.standard.set("remote", forKey: "ai_provider")
 4) Test with curl:
 ```
@@ -49,4 +53,3 @@ curl -H "Authorization: Bearer $API_KEY" <RUNPOD_ENDPOINT>/v1/models
 Security
 - Always require Authorization: Bearer token.
 - Do not log content bodies; only metadata (status, tokens, latency).
-

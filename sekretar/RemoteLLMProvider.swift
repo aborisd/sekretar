@@ -17,6 +17,10 @@ final class RemoteLLMProvider: LLMProviderProtocol {
         static let baseURL = "REMOTE_LLM_BASE_URL"
         static let apiKey = "REMOTE_LLM_API_KEY" // optional for self-hosted
         static let model = "REMOTE_LLM_MODEL"
+        static let maxTokens = "REMOTE_LLM_MAX_TOKENS"    // optional Int
+        static let temperature = "REMOTE_LLM_TEMPERATURE" // optional Double
+        static let httpReferer = "REMOTE_LLM_HTTP_REFERER" // optional, for OpenRouter etiquette
+        static let httpTitle = "REMOTE_LLM_HTTP_TITLE"     // optional, for OpenRouter etiquette
     }
 
     private func cfg(_ key: String) -> String? {
@@ -58,19 +62,25 @@ final class RemoteLLMProvider: LLMProviderProtocol {
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
         if let apiKey, !apiKey.isEmpty {
             req.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         }
+        // Optional etiquette headers for OpenRouter
+        if let referer = cfg(Keys.httpReferer) { req.setValue(referer, forHTTPHeaderField: "HTTP-Referer") }
+        if let title = cfg(Keys.httpTitle) { req.setValue(title, forHTTPHeaderField: "X-Title") }
 
         let system = "You are Sekretar, a helpful planning assistant. Be concise and actionable."
+        let temp = Double(cfg(Keys.temperature) ?? "") ?? 0.6
+        let maxTok = Int(cfg(Keys.maxTokens) ?? "") ?? 384
         let body = ChatRequest(
             model: model,
             messages: [
                 .init(role: "system", content: system),
                 .init(role: "user", content: prompt)
             ],
-            temperature: 0.6,
-            max_tokens: 512,
+            temperature: temp,
+            max_tokens: maxTok,
             stream: false
         )
         req.httpBody = try JSONEncoder().encode(body)
@@ -80,7 +90,13 @@ final class RemoteLLMProvider: LLMProviderProtocol {
         guard let http = response as? HTTPURLResponse, 200..<300 ~= http.statusCode else {
             let code = (response as? HTTPURLResponse)?.statusCode ?? -1
             let text = String(data: data, encoding: .utf8) ?? ""
-            throw NSError(domain: "RemoteLLM", code: code, userInfo: [NSLocalizedDescriptionKey: "Remote error (\(code)): \(text)"])
+            let friendly: String
+            switch code {
+            case 401, 403: friendly = "Ошибка авторизации: проверьте API ключ."
+            case 429: friendly = "Слишком много запросов: подождите немного и повторите."
+            default: friendly = "Удалённая ошибка (\(code))."
+            }
+            throw NSError(domain: "RemoteLLM", code: code, userInfo: [NSLocalizedDescriptionKey: friendly + "\n" + text])
         }
 
         try Task.checkCancellation()
