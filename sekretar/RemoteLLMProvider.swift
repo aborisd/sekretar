@@ -12,7 +12,7 @@ final class RemoteLLMProvider: LLMProviderProtocol {
         return URLSession(configuration: config)
     }()
 
-    // Prefer Info.plist keys; allow UserDefaults override for quick testing
+    // Prefer (1) UserDefaults, (2) RemoteLLM.plist (local, ignored by git), (3) Info.plist
     private enum Keys {
         static let baseURL = "REMOTE_LLM_BASE_URL"
         static let apiKey = "REMOTE_LLM_API_KEY" // optional for self-hosted
@@ -23,8 +23,18 @@ final class RemoteLLMProvider: LLMProviderProtocol {
         static let httpTitle = "REMOTE_LLM_HTTP_TITLE"     // optional, for OpenRouter etiquette
     }
 
+    private lazy var localPlist: [String: Any]? = {
+        guard let url = Bundle.main.url(forResource: "RemoteLLM", withExtension: "plist"),
+              let data = try? Data(contentsOf: url),
+              let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else {
+            return nil
+        }
+        return plist
+    }()
+
     private func cfg(_ key: String) -> String? {
         if let s = UserDefaults.standard.string(forKey: key), !s.isEmpty { return s }
+        if let s = localPlist?[key] as? String, !s.isEmpty { return s }
         if let dict = Bundle.main.infoDictionary, let s = dict[key] as? String, !s.isEmpty { return s }
         return nil
     }

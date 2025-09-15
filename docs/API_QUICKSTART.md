@@ -12,7 +12,7 @@ Option A — OpenRouter (10 minutes)
 2) Choose a model (examples):
    - meta-llama/llama-3.1-8b-instruct
    - mistralai/mistral-7b-instruct
-3) Configure iOS app (Info.plist or UserDefaults):
+3) Configure iOS app (Info.plist or UserDefaults): (see also `docs/INFO_PLIST_SNIPPET.md` for copy/paste)
    - REMOTE_LLM_BASE_URL = https://openrouter.ai/api
    - REMOTE_LLM_MODEL = <your model, e.g., meta-llama/llama-3.1-8b-instruct>
    - REMOTE_LLM_API_KEY = <your OpenRouter key>
