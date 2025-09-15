@@ -7,12 +7,22 @@ enum AIProviderFactory {
         if let explicit = defaults.string(forKey: "ai_provider") {
             return from(rawValue: explicit)
         }
-        // Auto-select remote when REMOTE_LLM_BASE_URL is configured in Info.plist/UserDefaults
-        if let base = (defaults.string(forKey: "REMOTE_LLM_BASE_URL") ?? (Bundle.main.infoDictionary?["REMOTE_LLM_BASE_URL"] as? String)),
-           !base.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        // Auto-select remote when REMOTE_LLM_BASE_URL is configured in UserDefaults / RemoteLLM.plist / Info.plist
+        if let base = resolveBaseURL(), !base.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return RemoteLLMProvider.shared
         }
         return MLCLLMProvider.shared
+    }
+
+    private static func resolveBaseURL() -> String? {
+        let defaults = UserDefaults.standard
+        if let s = defaults.string(forKey: "REMOTE_LLM_BASE_URL"), !s.isEmpty { return s }
+        if let url = Bundle.main.url(forResource: "RemoteLLM", withExtension: "plist"),
+           let data = try? Data(contentsOf: url),
+           let dict = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+           let s = dict["REMOTE_LLM_BASE_URL"] as? String, !s.isEmpty { return s }
+        if let s = Bundle.main.infoDictionary?["REMOTE_LLM_BASE_URL"] as? String, !s.isEmpty { return s }
+        return nil
     }
 
     static func from(rawValue: String) -> LLMProviderProtocol {

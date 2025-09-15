@@ -16,7 +16,8 @@ final class ChatViewModel: ObservableObject {
     @Published var input: String = ""
     @Published var typing: Bool = false
 
-    private let llm: LLMProviderProtocol = AIProviderFactory.current()
+    // Resolve provider dynamically so config changes (RemoteLLM.plist / Info.plist) take effect without relaunch
+    private var llm: LLMProviderProtocol { AIProviderFactory.current() }
     private var currentTask: Task<Void, Never>? = nil
 
     func send() {

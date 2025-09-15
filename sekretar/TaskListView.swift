@@ -70,10 +70,7 @@ struct TaskListView: View {
                     showingNewTask = true
                 }
                 .foregroundColor(.blue)
-                
                 Spacer()
-                
-                EditButton()
             }
         }
         .padding()
