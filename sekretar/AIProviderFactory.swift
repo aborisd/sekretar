@@ -4,8 +4,15 @@ import Foundation
 enum AIProviderFactory {
     static func current() -> LLMProviderProtocol {
         let defaults = UserDefaults.standard
-        let raw = defaults.string(forKey: "ai_provider") ?? "mlc"
-        return from(rawValue: raw)
+        if let explicit = defaults.string(forKey: "ai_provider") {
+            return from(rawValue: explicit)
+        }
+        // Auto-select remote when REMOTE_LLM_BASE_URL is configured in Info.plist/UserDefaults
+        if let base = (defaults.string(forKey: "REMOTE_LLM_BASE_URL") ?? (Bundle.main.infoDictionary?["REMOTE_LLM_BASE_URL"] as? String)),
+           !base.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return RemoteLLMProvider.shared
+        }
+        return MLCLLMProvider.shared
     }
 
     static func from(rawValue: String) -> LLMProviderProtocol {
