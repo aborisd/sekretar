@@ -49,3 +49,7 @@ Cloud Deployment Guides
 - RunPod: `docs/DEPLOY_VLLM_RUNPOD.md`
 - GCP: `docs/DEPLOY_VLLM_GCP.md`
 - AWS: `docs/DEPLOY_VLLM_AWS.md`
+
+API-Only Quickstart (no server)
+-------------------------------
+- OpenRouter: `docs/API_QUICKSTART.md`
