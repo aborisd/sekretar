@@ -72,7 +72,6 @@ struct ChatScreen: View {
     @State private var showUndoBanner = false
 
     @StateObject private var voice = VoiceInputService()
-    @State private var autoVoiceStarted = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -200,7 +199,12 @@ struct ChatScreen: View {
                 }
                 .buttonStyle(.bordered)
 
-                Button(action: vm.send) {
+                Button(action: {
+                    if voice.isRecording {
+                        Task { await voice.stop(); voice.reset() }
+                    }
+                    vm.send()
+                }) {
                     Image(systemName: "paperplane.fill")
                         .font(.system(size: 16, weight: .semibold))
                 }
@@ -233,13 +237,6 @@ struct ChatScreen: View {
                 .shadow(radius: 4)
                 .padding(.horizontal, 16)
                 .padding(.bottom, 16)
-            }
-        }
-        .task {
-            // Автостарт голосового ввода по умолчанию один раз при открытии чата
-            if !autoVoiceStarted {
-                autoVoiceStarted = true
-                if !voice.isRecording { await voice.start() }
             }
         }
         // Обновляем поле ввода во время диктовки, и отправляем по завершении

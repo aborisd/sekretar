@@ -37,6 +37,9 @@ class CalendarViewModel: ObservableObject {
     
     func switchViewMode(_ mode: CalendarViewMode) {
         viewMode = mode
+        if mode != .month {
+            selectedDate = currentDate
+        }
         loadDataForCurrentPeriod()
     }
     
@@ -50,6 +53,7 @@ class CalendarViewModel: ObservableObject {
         case .month:
             currentDate = calendar.date(byAdding: .month, value: -1, to: currentDate) ?? currentDate
         }
+        selectedDate = currentDate
         loadDataForCurrentPeriod()
     }
     
@@ -63,6 +67,7 @@ class CalendarViewModel: ObservableObject {
         case .month:
             currentDate = calendar.date(byAdding: .month, value: 1, to: currentDate) ?? currentDate
         }
+        selectedDate = currentDate
         loadDataForCurrentPeriod()
     }
     
@@ -148,7 +153,13 @@ class CalendarViewModel: ObservableObject {
     // MARK: - Private Methods
     
     private func setupSubscriptions() {
-        // Could add real-time updates here if needed
+        NotificationCenter.default.publisher(for: .NSManagedObjectContextDidSave, object: context)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                self.loadDataForCurrentPeriod()
+            }
+            .store(in: &cancellables)
     }
     
     private func loadDataForCurrentPeriod() {

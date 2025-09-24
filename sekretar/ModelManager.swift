@@ -9,9 +9,26 @@ struct LocalModel: Identifiable, Equatable {
     let isActive: Bool
 }
 
-// MARK: - Model Manager (stub)
+enum ModelManagerError: LocalizedError {
+    case unsupportedFile
+    case activeModelDeletion
+
+    var errorDescription: String? {
+        switch self {
+        case .unsupportedFile:
+            return Locale.current.identifier.lowercased().hasPrefix("ru")
+                ? "Этот формат не поддерживается. Выберите папку модели."
+                : "Unsupported format. Please choose a model folder."
+        case .activeModelDeletion:
+            return "Нельзя удалить активную модель. Сначала выберите другую."
+        }
+    }
+}
+
+// MARK: - Model Manager (runtime + local storage)
 // Responsible for listing/activating models and providing paths for runtime.
 // Networking/download is intentionally omitted in this stub.
+@MainActor
 final class ModelManager: ObservableObject {
     static let shared = ModelManager()
 
@@ -23,15 +40,15 @@ final class ModelManager: ObservableObject {
     private let activeIDKey = "mlc_active_model_id"
 
     private init() {
-        // Application Support /models
         let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         baseURL = appSupport.appendingPathComponent("models", isDirectory: true)
         try? fm.createDirectory(at: baseURL, withIntermediateDirectories: true)
         refresh()
     }
 
+    var modelsDirectory: URL { baseURL }
+
     func refresh() {
-        // Discover installed models by folder convention
         var results: [LocalModel] = []
         if let items = try? fm.contentsOfDirectory(at: baseURL, includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey], options: [.skipsHiddenFiles]) {
             for url in items {
@@ -52,6 +69,28 @@ final class ModelManager: ObservableObject {
         UserDefaults.standard.set(id, forKey: activeIDKey)
         activeModelID = id
         objectWillChange.send()
+        refresh()
+    }
+
+    func removeModel(id: String) throws {
+        guard id != activeModelIDStored() else { throw ModelManagerError.activeModelDeletion }
+        let url = baseURL.appendingPathComponent(id, isDirectory: true)
+        if fm.fileExists(atPath: url.path) {
+            try fm.removeItem(at: url)
+        }
+        refresh()
+    }
+
+    func installModel(from sourceURL: URL) throws {
+        let targetName = sanitizedName(from: sourceURL)
+        let targetURL = uniqueTargetURL(for: targetName)
+
+        guard sourceURL.hasDirectoryPath else {
+            throw ModelManagerError.unsupportedFile
+        }
+
+        try fm.copyItem(at: sourceURL, to: targetURL)
+        refresh()
     }
 
     func pathForActiveModel() -> URL? {
@@ -59,15 +98,11 @@ final class ModelManager: ObservableObject {
         return baseURL.appendingPathComponent(id, isDirectory: true)
     }
 
-    /// Best-effort guess for the model library symbol name. Can be overridden later.
-    /// When using `mlc_llm package`, the default linked name is typically `model_iphone`.
     func activeModelLibName() -> String? {
-        // TODO: Parse mlc-app-config.json if present to derive a specific model_lib
         return "model_iphone"
     }
 
     func ensureDefaultModelIfMissing(id: String = "tinyllama-1.1b-chat-v1.0-q4f16_1") {
-        // Placeholder: in a later step, copy a bundled starter model if not present
         let modelURL = baseURL.appendingPathComponent(id, isDirectory: true)
         if !fm.fileExists(atPath: modelURL.path) {
             try? fm.createDirectory(at: modelURL, withIntermediateDirectories: true)
@@ -91,4 +126,23 @@ final class ModelManager: ObservableObject {
         }
         return size
     }
+
+    private func sanitizedName(from url: URL) -> String {
+        let base = url.deletingPathExtension().lastPathComponent
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_"))
+        let filteredScalars = base.unicodeScalars.map { allowed.contains($0) ? Character($0) : "_" }
+        let name = String(filteredScalars)
+        return name.isEmpty ? "model" : name
+    }
+
+    private func uniqueTargetURL(for name: String) -> URL {
+        var candidate = baseURL.appendingPathComponent(name, isDirectory: true)
+        var index = 1
+        while fm.fileExists(atPath: candidate.path) {
+            candidate = baseURL.appendingPathComponent("\(name)-\(index)", isDirectory: true)
+            index += 1
+        }
+        return candidate
+    }
+
 }

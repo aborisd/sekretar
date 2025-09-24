@@ -18,15 +18,18 @@ struct AIActionInlineCard: View {
             Text(action.description)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+                .lineLimit(4)
 
             if !action.payload.isEmpty {
                 Divider()
                 VStack(alignment: .leading, spacing: 6) {
-                    ForEach(previewItems.prefix(4), id: \.0) { key, val in
+                    ForEach(previewItems.prefix(4)) { item in
                         HStack {
-                            Text(key).foregroundStyle(.secondary)
+                            Text(item.title)
+                                .foregroundStyle(.secondary)
                             Spacer(minLength: 8)
-                            Text(val)
+                            Text(item.value)
+                                .lineLimit(2)
                         }
                         .font(.caption)
                     }
@@ -60,18 +63,53 @@ struct AIActionInlineCard: View {
         }
     }
 
-    private var previewItems: [(String, String)] {
-        action.payload.map { k, v in (displayKey(k), displayValue(v)) }.sorted { $0.0 < $1.0 }
+    private var previewItems: [PreviewItem] {
+        action.payload.compactMap { key, value in
+            guard let display = displayValue(value) else { return nil }
+            return PreviewItem(key: key, title: displayKey(key), value: display)
+        }
+        .sorted { lhs, rhs in
+            if ranking(for: lhs.key) == ranking(for: rhs.key) {
+                return lhs.title < rhs.title
+            }
+            return ranking(for: lhs.key) < ranking(for: rhs.key)
+        }
     }
 
     private func displayKey(_ k: String) -> String { k.replacingOccurrences(of: "_", with: " ").capitalized }
 
-    private func displayValue(_ v: Any) -> String {
-        if let s = v as? String { return s }
+    private func ranking(for key: String) -> Int {
+        let order = ["title", "start", "begin", "end", "dueDate", "is_all_day", "priority", "notes", "estimated_duration", "suggested_tags", "confidence"]
+        return order.firstIndex(of: key) ?? order.count
+    }
+
+    private func displayValue(_ v: Any) -> String? {
+        if let s = v as? String {
+            let trimmed = s.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        }
         if let d = v as? Date { return d.formatted(date: .abbreviated, time: .shortened) }
         if let n = v as? NSNumber { return n.stringValue }
         if let b = v as? Bool { return b ? "Да" : "Нет" }
+        if let array = v as? [String] { return array.joined(separator: ", ") }
+        if let array = v as? [Any] {
+            let values = array.compactMap { displayValue($0) }
+            return values.isEmpty ? nil : values.joined(separator: ", ")
+        }
+        if let dict = v as? [String: Any] {
+            let pairs = dict.compactMap { key, value -> String? in
+                guard let display = displayValue(value) else { return nil }
+                return "\(key): \(display)"
+            }
+            return pairs.isEmpty ? nil : pairs.joined(separator: ", ")
+        }
         return String(describing: v)
     }
 }
 
+private struct PreviewItem: Identifiable {
+    let id = UUID()
+    let key: String
+    let title: String
+    let value: String
+}

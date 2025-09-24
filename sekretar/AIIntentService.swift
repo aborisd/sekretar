@@ -247,8 +247,10 @@ final class AIIntentService: ObservableObject {
         
         return AIAction(
             type: .createTask,
-            title: "Create Task",
-            description: startDate != nil ? "Create task and schedule time window" : "Create task: \"\(title)\" with priority \(analysis.suggestedPriority)",
+            title: L10n.AIActionText.createTaskTitle,
+            description: startDate != nil
+                ? localized("Создать задачу и забронировать время", en: "Create task and schedule time window")
+                : localized("Создать задачу \"\(title)\" с приоритетом \(analysis.suggestedPriority)", en: "Create task \"\(title)\" with priority \(analysis.suggestedPriority)"),
             confidence: 0.85,
             requiresConfirmation: true,
             payload: payload
@@ -260,8 +262,8 @@ final class AIIntentService: ObservableObject {
         // In a full implementation, this would find the task to modify
         return AIAction(
             type: .updateTask,
-            title: "Modify Task",
-            description: "I can help you modify a task. Which task would you like to change?",
+            title: L10n.AIActionText.updateTaskTitle,
+            description: localized("Я помогу изменить задачу. Какую именно нужно обновить?", en: "I can help you modify a task. Which task would you like to change?"),
             confidence: 0.7,
             requiresConfirmation: true,
             payload: ["input": input]
@@ -271,8 +273,8 @@ final class AIIntentService: ObservableObject {
     private func generateDeleteTaskAction(input: String) async throws -> AIAction {
         return AIAction(
             type: .deleteTask,
-            title: "Delete Task",
-            description: "I can help you delete a task. Which task would you like to remove?",
+            title: L10n.AIActionText.deleteTaskTitle,
+            description: localized("Какую задачу удалить?", en: "Which task would you like to remove?"),
             confidence: 0.7,
             requiresConfirmation: true,
             payload: ["input": input]
@@ -282,8 +284,8 @@ final class AIIntentService: ObservableObject {
     private func generateScheduleTaskAction(input: String) async throws -> AIAction {
         return AIAction(
             type: .suggestTimeSlots,
-            title: "Schedule Task",
-            description: "Let me find the best time slots for your task.",
+            title: L10n.AIActionText.scheduleTaskTitle,
+            description: localized("Подберу подходящие окна в расписании.", en: "Let me find the best time slots for your task."),
             confidence: 0.8,
             requiresConfirmation: false,
             payload: ["input": input]
@@ -293,8 +295,8 @@ final class AIIntentService: ObservableObject {
     private func generateSuggestionAction(input: String) async throws -> AIAction {
         return AIAction(
             type: .suggestTimeSlots,
-            title: "Productivity Suggestions",
-            description: "I'll analyze your tasks and provide personalized suggestions.",
+            title: L10n.AIActionText.scheduleTaskTitle,
+            description: localized("Проанализирую задачи и предложу улучшения.", en: "I'll analyze your tasks and provide personalized suggestions."),
             confidence: 0.9,
             requiresConfirmation: false,
             payload: ["context": input]
@@ -302,18 +304,32 @@ final class AIIntentService: ObservableObject {
     }
 
     private func generateCreateEventAction(input: String) async throws -> AIAction {
-        let draft = try await llmProvider.parseEvent(input)
-        let payload: [String: Any] = [
-            "title": draft.title.isEmpty ? "Событие" : draft.title,
+        var draft = try await llmProvider.parseEvent(input)
+        draft = await normalizeEventDraft(draft, originalInput: input)
+
+        let title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Событие" : draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        var payload: [String: Any] = [
+            "title": title,
             "start": draft.start,
             "end": draft.end,
             "is_all_day": draft.isAllDay
         ]
+        if !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            payload["notes"] = input
+        }
+
+        let descriptionFormatter = DateFormatter()
+        descriptionFormatter.locale = Locale(identifier: "ru_RU")
+        descriptionFormatter.dateFormat = draft.isAllDay ? "d MMMM" : "d MMMM, HH:mm"
+        let timeString = descriptionFormatter.string(from: draft.start)
+
         return AIAction(
             type: .createEvent,
-            title: "Создать событие",
-            description: "\(payload["title"] as? String ?? "Событие") — \(draft.start.formatted(date: .abbreviated, time: .shortened))",
-            confidence: 0.8,
+            title: L10n.AIActionText.createEventTitle,
+            description: draft.isAllDay
+                ? localized("\(title) — весь день \(timeString)", en: "\(title) — all-day on \(timeString)")
+                : localized("\(title) — \(timeString)", en: "\(title) — \(timeString)"),
+            confidence: 0.85,
             requiresConfirmation: true,
             payload: payload
         )
@@ -321,11 +337,23 @@ final class AIIntentService: ObservableObject {
     
     private func generateQuestionAction(input: String) async throws -> AIAction {
         let response = try await llmProvider.generateResponse(input)
-        
+        let trimmed = response.trimmingCharacters(in: .whitespacesAndNewlines)
+        let concise: String
+        if trimmed.count > 320 {
+            if let lastSentenceEnd = trimmed.prefix(320).lastIndex(of: Character(".")) {
+                let candidate = trimmed[..<trimmed.index(after: lastSentenceEnd)]
+                concise = candidate.trimmingCharacters(in: .whitespacesAndNewlines) + " …"
+            } else {
+                concise = trimmed.prefix(320).trimmingCharacters(in: .whitespacesAndNewlines) + " …"
+            }
+        } else {
+            concise = trimmed
+        }
+
         return AIAction(
             type: .requestClarification,
-            title: "Answer",
-            description: response,
+            title: L10n.AIActionText.answerTitle,
+            description: concise,
             confidence: 0.8,
             requiresConfirmation: false,
             payload: ["question": input, "answer": response]
@@ -638,6 +666,86 @@ final class AIIntentService: ObservableObject {
         if cleaned.isEmpty { return "Задача" }
         return cleaned.prefix(1).uppercased() + cleaned.dropFirst()
     }
+
+    private func normalizeEventDraft(_ draft: EventDraft, originalInput: String) async -> EventDraft {
+        var adjusted = draft
+        let now = Date()
+        let reference = Date(timeIntervalSince1970: 946684800) // 1 Jan 2000
+
+        if adjusted.start < reference || adjusted.start.timeIntervalSince1970 <= 0 {
+            if let fallback = try? await EnhancedLLMProvider.shared.parseEvent(originalInput) {
+                adjusted = fallback
+            } else if let heuristic = heuristicEvent(from: originalInput, base: now) {
+                adjusted = heuristic
+            }
+        }
+
+        // Гарантируем длительность хотя бы 30 минут
+        if adjusted.end <= adjusted.start {
+            let end = adjusted.start.addingTimeInterval(1800)
+            adjusted = EventDraft(title: adjusted.title, start: adjusted.start, end: end, isAllDay: adjusted.isAllDay)
+        }
+
+        let trimmed = adjusted.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            let fallbackTitle = extractTaskTitle(from: originalInput)
+            adjusted = EventDraft(title: fallbackTitle, start: adjusted.start, end: adjusted.end, isAllDay: adjusted.isAllDay)
+        }
+
+        return adjusted
+    }
+
+    private func heuristicEvent(from input: String, base: Date) -> EventDraft? {
+        let lower = input.lowercased()
+        let calendar = Calendar.current
+        var day = calendar.startOfDay(for: base)
+        if lower.contains("завтра") || lower.contains("tomorrow") {
+            day = calendar.date(byAdding: .day, value: 1, to: day) ?? day
+        } else if lower.contains("послезавтра") || lower.contains("day after") {
+            day = calendar.date(byAdding: .day, value: 2, to: day) ?? day
+        }
+
+        let timePattern = try? NSRegularExpression(pattern: "(?:(?:в|at)\\s*)?([01]?\\d|2[0-3])[:\\.]?([0-5]\\d)?", options: [.caseInsensitive])
+        let range = NSRange(lower.startIndex..<lower.endIndex, in: lower)
+        guard let match = timePattern?.firstMatch(in: lower, options: [], range: range),
+              let hourRange = Range(match.range(at: 1), in: lower) else {
+            return nil
+        }
+
+        var hour = Int(lower[hourRange]) ?? 0
+        var minute = 0
+        if let minuteRange = Range(match.range(at: 2), in: lower) {
+            minute = Int(lower[minuteRange]) ?? 0
+        }
+
+        if lower.contains("вечера") || lower.contains("pm") || lower.contains("дня") {
+            if hour < 12 { hour += 12 }
+        }
+        if lower.contains("утра") && hour == 12 { hour = 0 }
+
+        guard let start = calendar.date(byAdding: DateComponents(hour: hour, minute: minute), to: day) else {
+            return nil
+        }
+
+        let end = start.addingTimeInterval(3600)
+        let title = extractTaskTitle(from: input)
+        return EventDraft(title: title, start: start, end: end, isAllDay: false)
+    }
+
+    private var isRussianLocale: Bool {
+        if let stored = UserDefaults.standard.string(forKey: "app_language") {
+            return stored.lowercased().hasPrefix("ru")
+        }
+        if let languageCode = Locale.preferredLanguages.first {
+            return languageCode.lowercased().hasPrefix("ru")
+        }
+        return Locale.current.identifier.lowercased().hasPrefix("ru")
+    }
+
+    private func localized(_ ru: String, en: String) -> String {
+        isRussianLocale ? ru : en
+    }
+
     
     private func fetchCurrentTasks() async throws -> [TaskSummary] {
         return try await context.perform {
@@ -697,17 +805,18 @@ final class AIIntentService: ObservableObject {
         switch action.type {
         case .createTask:
             let title = (action.payload["title"] as? String) ?? "Задача"
-            return "✅ Задача создана: \(title)"
+            return L10n.AIToast.taskCreated(title)
         case .createEvent:
             let title = (action.payload["title"] as? String) ?? "Событие"
             if let start = action.payload["start"] as? Date {
-                return "✅ Событие: \(title) — \(start.formatted(date: .abbreviated, time: .shortened))"
+                let time = start.formatted(date: .abbreviated, time: .shortened)
+                return L10n.AIToast.eventCreated(title, time: time)
             }
-            return "✅ Событие создано: \(title)"
+            return L10n.AIToast.eventCreated(title, time: nil)
         case .suggestTimeSlots:
-            return "✅ Предложены временные слоты"
+            return L10n.AIToast.slots
         default:
-            return "✅ Действие выполнено"
+            return L10n.AIToast.default
         }
     }
 

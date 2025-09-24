@@ -60,3 +60,21 @@
 "priority.low" = "Low";
 "priority.medium" = "Medium";
 "priority.high" = "High";
+
+/* AI Actions */
+"ai.action.create_task.title" = "Create Task";
+"ai.action.update_task.title" = "Update Task";
+"ai.action.delete_task.title" = "Delete Task";
+"ai.action.create_event.title" = "Create Event";
+"ai.action.update_event.title" = "Update Event";
+"ai.action.delete_event.title" = "Delete Event";
+"ai.action.schedule_task.title" = "Schedule Task";
+"ai.action.clarification.title" = "Need Clarification";
+"ai.action.answer.title" = "Answer";
+
+/* AI Toasts */
+"ai.toast.task_created" = "✅ Task created: %@";
+"ai.toast.event_created_with_time" = "✅ Event: %@ — %@";
+"ai.toast.event_created" = "✅ Event created: %@";
+"ai.toast.slots" = "✅ Suggested time slots";
+"ai.toast.default" = "✅ Action completed";

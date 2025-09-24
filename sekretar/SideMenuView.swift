@@ -3,7 +3,8 @@ import SwiftUI
 struct SideMenuView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var userName = "User"
-    
+    @State private var showModelManager = false
+
     var body: some View {
         NavigationView {
             VStack(alignment: .leading, spacing: 0) {
@@ -20,7 +21,7 @@ struct SideMenuView: View {
                 }
                 
                 Spacer()
-                
+
                 // Footer
                 footerSection
             }
@@ -34,6 +35,9 @@ struct SideMenuView: View {
                     .foregroundColor(DesignSystem.Colors.primaryBlue)
                 }
             }
+        }
+        .sheet(isPresented: $showModelManager) {
+            NavigationView { ModelManagerView() }
         }
     }
     
@@ -75,6 +79,8 @@ struct SideMenuView: View {
             MenuRow(icon: "icloud", title: "Google Calendar", action: {})
             MenuRow(icon: "calendar", title: "Outlook", action: {})
             MenuRow(icon: "applelogo", title: "Apple Calendar", action: {})
+            Divider().padding(.vertical, 8)
+            MenuRow(icon: "cpu", title: "Модели ИИ", action: { showModelManager = true })
             Divider().padding(.vertical, 8)
             MenuRow(icon: "bell", title: "Уведомления", action: {})
             MenuRow(icon: "moon", title: "Темная тема", action: {})

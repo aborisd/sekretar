@@ -60,3 +60,21 @@
 "priority.low" = "Низкий";
 "priority.medium" = "Средний";
 "priority.high" = "Высокий";
+
+/* AI Actions */
+"ai.action.create_task.title" = "Создать задачу";
+"ai.action.update_task.title" = "Изменить задачу";
+"ai.action.delete_task.title" = "Удалить задачу";
+"ai.action.create_event.title" = "Создать событие";
+"ai.action.update_event.title" = "Изменить событие";
+"ai.action.delete_event.title" = "Удалить событие";
+"ai.action.schedule_task.title" = "Подобрать время";
+"ai.action.clarification.title" = "Нужно уточнение";
+"ai.action.answer.title" = "Ответ";
+
+/* AI Toasts */
+"ai.toast.task_created" = "✅ Задача создана: %@";
+"ai.toast.event_created_with_time" = "✅ Событие: %@ — %@";
+"ai.toast.event_created" = "✅ Событие создано: %@";
+"ai.toast.slots" = "✅ Предложены временные слоты";
+"ai.toast.default" = "✅ Действие выполнено";

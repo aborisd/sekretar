@@ -1,5 +1,8 @@
 import SwiftUI
 import CoreData
+#if canImport(UIKit)
+import UIKit
+#endif
 
 struct TaskListView: View {
     @Environment(\.managedObjectContext) private var context
@@ -10,6 +13,7 @@ struct TaskListView: View {
     // Navigation state for editor
     @State private var showEditor = false
     @State private var selectedTaskID: NSManagedObjectID?
+    @FocusState private var quickFieldFocused: Bool
 
     @FetchRequest private var tasks: FetchedResults<TaskEntity>
     // Без режима множественного редактирования
@@ -44,6 +48,14 @@ struct TaskListView: View {
             .navigationBarTitleDisplayMode(.large)
             .toolbar {}
             .onAppear { cleanupEmptyDraftTasks() }
+            .onDisappear {
+                quickFieldFocused = false
+                dismissKeyboard()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .dismissKeyboard)) { _ in
+                quickFieldFocused = false
+                dismissKeyboard()
+            }
             .sheet(isPresented: $showingNewTask, onDismiss: { draftTask = nil }) {
                 if let task = draftTask {
                     TaskEditorView(task: task)
@@ -63,26 +75,28 @@ struct TaskListView: View {
     }
     
     private var quickTaskHeader: some View {
-        VStack(spacing: 12) {
-            HStack {
+        VStack(spacing: 16) {
+            HStack(spacing: 12) {
                 TextField("Быстрая задача…", text: $quickText)
                     .textFieldStyle(.roundedBorder)
+                    .focused($quickFieldFocused)
+                    .submitLabel(.done)
                     .onSubmit { addTask() }
+
                 Button("Добавить") { addTask() }
+                    .buttonStyle(.borderedProminent)
                     .disabled(quickText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
-            
-            HStack {
-                Button("Новая задача") {
-                    // Создаём черновик ровно один раз на показ sheet
-                    if draftTask == nil { draftTask = createNewTask() }
-                    showingNewTask = true
-                }
-                .foregroundColor(.blue)
-                Spacer()
+
+            Button("Новая задача") {
+                if draftTask == nil { draftTask = createNewTask() }
+                showingNewTask = true
             }
+            .foregroundColor(.blue)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding()
+        .padding(.horizontal, 16)
+        .padding(.vertical, 20)
     }
     
     private var tasksList: some View {
@@ -143,6 +157,8 @@ struct TaskListView: View {
         Task { 
             await viewModel.addQuickTask(title: quickText)
             quickText.removeAll() 
+            quickFieldFocused = false
+            dismissKeyboard()
         }
     }
     
@@ -165,5 +181,11 @@ struct TaskListView: View {
             for d in drafts { context.delete(d) }
             try? context.save()
         }
+    }
+
+    private func dismissKeyboard() {
+        #if canImport(UIKit)
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        #endif
     }
 }

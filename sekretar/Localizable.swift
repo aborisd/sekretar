@@ -78,6 +78,34 @@ struct L10n {
         static let medium = L10n.string("priority.medium")
         static let high = L10n.string("priority.high")
     }
+
+    struct AIActionText {
+        static let createTaskTitle = L10n.string("ai.action.create_task.title")
+        static let updateTaskTitle = L10n.string("ai.action.update_task.title")
+        static let deleteTaskTitle = L10n.string("ai.action.delete_task.title")
+        static let createEventTitle = L10n.string("ai.action.create_event.title")
+        static let updateEventTitle = L10n.string("ai.action.update_event.title")
+        static let deleteEventTitle = L10n.string("ai.action.delete_event.title")
+        static let scheduleTaskTitle = L10n.string("ai.action.schedule_task.title")
+        static let clarificationTitle = L10n.string("ai.action.clarification.title")
+        static let answerTitle = L10n.string("ai.action.answer.title")
+    }
+
+    struct AIToast {
+        static func taskCreated(_ title: String) -> String {
+            String(format: L10n.string("ai.toast.task_created"), title)
+        }
+
+        static func eventCreated(_ title: String, time: String?) -> String {
+            if let time {
+                return String(format: L10n.string("ai.toast.event_created_with_time"), title, time)
+            }
+            return String(format: L10n.string("ai.toast.event_created"), title)
+        }
+
+        static let slots = L10n.string("ai.toast.slots")
+        static let `default` = L10n.string("ai.toast.default")
+    }
 }
 
 // MARK: - String Extension for Localization

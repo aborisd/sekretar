@@ -359,10 +359,31 @@ final class RemoteLLMProvider: LLMProviderProtocol {
             "\"title\": string, \"start_iso\": ISO8601, \"end_iso\": ISO8601, \"all_day\": boolean" +
         "}"
         let json = try await jsonCall(schemaDescription: schema, userContent: "Parse event from text: \(description)", type: EventJSON.self)
-        let df = ISO8601DateFormatter(); df.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let start = df.date(from: json.start_iso) ?? Date()
-        let end = df.date(from: json.end_iso) ?? start.addingTimeInterval(3600)
+        let start = parseDate(json.start_iso) ?? Date()
+        let endCandidate = parseDate(json.end_iso) ?? start.addingTimeInterval(3600)
+        let end = endCandidate > start ? endCandidate : start.addingTimeInterval(3600)
         return EventDraft(title: json.title, start: start, end: end, isAllDay: json.all_day ?? false)
+    }
+
+    private func parseDate(_ string: String) -> Date? {
+        guard !string.isEmpty else { return nil }
+
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = iso.date(from: string) { return date }
+
+        iso.formatOptions = [.withInternetDateTime]
+        if let date = iso.date(from: string) { return date }
+
+        let fallback = DateFormatter()
+        fallback.locale = Locale(identifier: "en_US_POSIX")
+        fallback.timeZone = TimeZone(secondsFromGMT: 0)
+        fallback.dateFormat = "yyyy-MM-dd'T'HH:mm:ssZZZZZ"
+        if let date = fallback.date(from: string) { return date }
+
+        fallback.timeZone = TimeZone.current
+        fallback.dateFormat = "yyyy-MM-dd HH:mm"
+        return fallback.date(from: string)
     }
 
     // (Legacy fallbacks removed — handled above per-method)

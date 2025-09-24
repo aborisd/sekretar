@@ -1,619 +1,605 @@
 import SwiftUI
-import EventKit
 import CoreData
 
 struct CalendarScreen: View {
-    @State private var selectedDate = Date()
-    @State private var currentMonth = Date()
-    @State private var viewMode: CalendarViewMode = .month
-    @State private var events: [EKEvent] = []
-    @State private var showingEventDetail = false
-    @State private var selectedEvent: EKEvent?
-    
-    private let calendar = Calendar.current
-    
-    enum CalendarViewMode: String, CaseIterable {
-        case day = "День"
-        case week = "Неделя"
-        case month = "Месяц"
-        
-        var systemImage: String {
+    @StateObject private var viewModel: CalendarViewModel
+    @State private var presentedDetail: CalendarDetail?
+
+    private struct ModeOption: Identifiable {
+        let id: CalendarViewMode
+        let title: String
+        let icon: String
+    }
+
+    fileprivate enum CalendarDetail: Identifiable {
+        case event(EventEntity)
+        case task(TaskEntity)
+
+        var id: NSManagedObjectID {
             switch self {
-            case .day: return "calendar.day.timeline.left"
-            case .week: return "calendar"
-            case .month: return "calendar.month"
+            case .event(let event):
+                return event.objectID
+            case .task(let task):
+                return task.objectID
             }
         }
     }
-    
+
+    private let modeOptions: [ModeOption] = [
+        .init(id: .day, title: "День", icon: "calendar.day.timeline.left"),
+        .init(id: .week, title: "Неделя", icon: "calendar"),
+        .init(id: .month, title: "Месяц", icon: "calendar.month")
+    ]
+
+    private let calendar = Calendar.current
+
+    init(viewModel: CalendarViewModel) {
+        _viewModel = StateObject(wrappedValue: viewModel)
+    }
+
     var body: some View {
-        NavigationView {
-            VStack(spacing: 0) {
-                // View mode picker
-                viewModePickerView
-                
-                // Calendar content based on selected mode
-                Group {
-                    switch viewMode {
-                    case .day:
-                        dayView
-                    case .week:
-                        weekView
-                    case .month:
-                        monthView
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 0) {
+                    modePicker
+                    Group {
+                        switch viewModel.viewMode {
+                        case .day:
+                            dayView
+                        case .week:
+                            weekView
+                        case .month:
+                            monthView
+                        }
                     }
+                    agendaSection
                 }
-                
-                Spacer()
             }
+            .background(Color(.systemGroupedBackground))
             .navigationTitle("Календарь")
             .navigationBarTitleDisplayMode(.inline)
-            .onAppear {
-                loadEvents()
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Сегодня") { viewModel.goToToday() }
+                        .font(.callout)
+                }
             }
             .onReceive(NotificationCenter.default.publisher(for: .focusCalendarDate)) { note in
-                if let d = note.userInfo?["date"] as? Date {
-                    selectedDate = d
-                    loadEventsForDate(d)
+                if let date = note.userInfo?["date"] as? Date {
+                    viewModel.selectDate(date)
                 }
             }
-            .sheet(item: $selectedEvent) { event in
-                EventDetailView(event: event)
+            .sheet(item: $presentedDetail) { detail in
+                CalendarDetailSheet(detail: detail)
             }
         }
     }
-    
-    private var viewModePickerView: some View {
-        Picker("View Mode", selection: $viewMode) {
-            ForEach(CalendarViewMode.allCases, id: \.self) { mode in
-                HStack {
-                    Image(systemName: mode.systemImage)
-                    Text(mode.rawValue)
-                }
-                .tag(mode)
+}
+
+// MARK: - Subviews
+private extension CalendarScreen {
+    var modePicker: some View {
+        Picker("", selection: viewModeBinding) {
+            ForEach(modeOptions) { option in
+                Label(option.title, systemImage: option.icon)
+                    .tag(option.id)
             }
         }
-        .pickerStyle(SegmentedPickerStyle())
+        .pickerStyle(.segmented)
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
+        .padding(.bottom, 8)
+    }
+
+    var dayView: some View {
+        VStack(spacing: 16) {
+            header(title: longDateFormatter.string(from: viewModel.selectedDate), subtitle: weekdayFormatter.string(from: viewModel.selectedDate))
+            dayTimeline
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 12)
+    }
+
+    var weekView: some View {
+        VStack(spacing: 16) {
+            header(title: weekTitle, subtitle: monthYearFormatter.string(from: viewModel.currentDate))
+            weekGrid
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 12)
+    }
+
+    var monthView: some View {
+        VStack(spacing: 12) {
+            header(title: monthYearFormatter.string(from: viewModel.currentDate).capitalized, subtitle: "")
+            weekdayHeader
+            monthGrid
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 12)
+    }
+
+    var agendaSection: some View {
+        let events = viewModel.eventsFor(date: viewModel.selectedDate)
+        let tasks = viewModel.tasksFor(date: viewModel.selectedDate)
+
+        return VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Text("Запланировано на \(shortDateFormatter.string(from: viewModel.selectedDate))")
+                    .font(.headline)
+                Spacer()
+                if !calendar.isDateInToday(viewModel.selectedDate) {
+                    Button("Сегодня") { viewModel.goToToday() }
+                        .font(.subheadline)
+                }
+            }
+
+            if events.isEmpty && tasks.isEmpty {
+                emptyAgendaPlaceholder
+            } else {
+                if !events.isEmpty {
+                    Text("События")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    ForEach(events, id: \.objectID) { event in
+                        agendaRow.eventRow(event: event)
+                            .onTapGesture { presentedDetail = .event(event) }
+                    }
+                }
+
+                if !tasks.isEmpty {
+                    Text("Задачи")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .padding(.top, events.isEmpty ? 0 : 8)
+                    ForEach(tasks, id: \.objectID) { task in
+                        agendaRow.taskRow(task: task)
+                            .onTapGesture { presentedDetail = .task(task) }
+                    }
+                }
+            }
+        }
+        .padding(20)
+        .background(Color(.secondarySystemGroupedBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .padding(.horizontal, 16)
+        .padding(.bottom, 20)
+    }
+
+    var emptyAgendaPlaceholder: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "calendar.badge.plus")
+                .font(.title2)
+                .foregroundColor(.secondary)
+            Text("Нет запланированных событий или задач")
+                .foregroundColor(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
+        .background(Color(.tertiarySystemGroupedBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
-    
-    private var dayView: some View {
-        VStack(spacing: 0) {
-            // Day header
-            dayHeaderView
-            
-            // Day timeline
-            dayTimelineView
-        }
-    }
-    
-    private var dayHeaderView: some View {
+
+    func header(title: String, subtitle: String) -> some View {
         HStack {
-            Button(action: previousDay) {
+            Button(action: viewModel.navigatePrevious) {
                 Image(systemName: "chevron.left")
+                    .font(.title2)
                     .foregroundColor(.blue)
-                    .font(.title2)
             }
-            
+
             Spacer()
-            
-            VStack {
-                Text(dayTitle)
+
+            VStack(spacing: subtitle.isEmpty ? 0 : 2) {
+                Text(title)
                     .font(.title2)
-                    .fontWeight(.bold)
-                Text(daySubtitle)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                    .fontWeight(.semibold)
+                if !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
             }
-            
+
             Spacer()
-            
-            Button(action: nextDay) {
+
+            Button(action: viewModel.navigateNext) {
                 Image(systemName: "chevron.right")
-                    .foregroundColor(.blue)
                     .font(.title2)
+                    .foregroundColor(.blue)
             }
         }
-        .padding(.horizontal)
-        .padding(.vertical, 10)
     }
-    
-    private var dayTimelineView: some View {
+
+    var dayTimeline: some View {
         ScrollView {
             VStack(spacing: 0) {
                 ForEach(0..<24) { hour in
                     HStack(alignment: .top) {
-                        Text("\(hour):00")
+                        Text(String(format: "%02d:00", hour))
                             .font(.caption)
                             .foregroundColor(.secondary)
-                            .frame(width: 50, alignment: .trailing)
-                        
+                            .frame(width: 44, alignment: .trailing)
                         Rectangle()
-                            .fill(Color.gray.opacity(0.3))
+                            .fill(Color.gray.opacity(0.2))
                             .frame(height: 0.5)
-                        
                         Spacer()
                     }
-                    .frame(height: 60)
+                    .frame(height: 48)
                 }
             }
         }
-        .padding(.horizontal)
+        .frame(maxHeight: 320)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color.gray.opacity(0.15))
+        )
     }
-    
-    private var weekView: some View {
-        VStack(spacing: 0) {
-            // Week header
-            weekHeaderView
-            
-            // Week grid
-            weekGridView
-        }
-    }
-    
-    private var weekHeaderView: some View {
-        HStack {
-            Button(action: previousWeek) {
-                Image(systemName: "chevron.left")
-                    .foregroundColor(.blue)
-                    .font(.title2)
-            }
-            
-            Spacer()
-            
-            Text(weekTitle)
-                .font(.title2)
-                .fontWeight(.bold)
-            
-            Spacer()
-            
-            Button(action: nextWeek) {
-                Image(systemName: "chevron.right")
-                    .foregroundColor(.blue)
-                    .font(.title2)
-            }
-        }
-        .padding(.horizontal)
-        .padding(.vertical, 10)
-    }
-    
-    private var weekGridView: some View {
-        VStack(spacing: 0) {
-            // Day headers
+
+    var weekGrid: some View {
+        VStack(spacing: 12) {
             HStack(spacing: 0) {
                 ForEach(weekDays, id: \.self) { date in
-                    VStack {
-                        Text(dayOfWeekFormatter.string(from: date))
+                    VStack(spacing: 6) {
+                        Text(weekdayShortFormatter.string(from: date))
                             .font(.caption)
-                            .fontWeight(.medium)
                             .foregroundColor(.secondary)
-                        
-                        Text(dayFormatter.string(from: date))
+                        Text(dayNumberFormatter.string(from: date))
                             .font(.title3)
-                            .fontWeight(calendar.isDate(date, inSameDayAs: selectedDate) ? .bold : .regular)
+                            .fontWeight(calendar.isDate(date, inSameDayAs: viewModel.selectedDate) ? .bold : .regular)
                             .foregroundColor(calendar.isDateInToday(date) ? .blue : .primary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 6)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .fill(calendar.isDate(date, inSameDayAs: viewModel.selectedDate) ? Color.blue.opacity(0.12) : .clear)
+                            )
                     }
                     .frame(maxWidth: .infinity)
-                    .onTapGesture {
-                        selectedDate = date
-                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture { viewModel.selectDate(date) }
                 }
             }
-            .padding(.horizontal)
-            .padding(.bottom, 10)
-            
-            // Week timeline (simplified)
-            ScrollView {
-                VStack(spacing: 0) {
-                    ForEach(Array(stride(from: 6, through: 22, by: 2)), id: \.self) { hour in
-                        HStack {
-                            Text("\(hour):00")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                                .frame(width: 40)
-                            
-                            HStack(spacing: 1) {
-                                ForEach(weekDays, id: \.self) { date in
-                                    Rectangle()
-                                        .fill(Color.gray.opacity(0.1))
-                                        .frame(height: 40)
+
+            Divider()
+
+            HStack(alignment: .top, spacing: 12) {
+                ForEach(weekDays, id: \.self) { date in
+                    VStack(spacing: 8) {
+                        if calendar.isDate(date, inSameDayAs: viewModel.selectedDate) {
+                            Circle()
+                                .fill(Color.blue)
+                                .frame(width: 6, height: 6)
+                        } else {
+                            Color.clear.frame(width: 6, height: 6)
+                        }
+
+                        let indicatorColors = priorityIndicators(for: date)
+                        if indicatorColors.isEmpty {
+                            Spacer().frame(height: 8)
+                        } else {
+                            HStack(spacing: 4) {
+                                ForEach(Array(indicatorColors.enumerated()), id: \.offset) { item in
+                                    Circle()
+                                        .fill(item.element)
+                                        .frame(width: 8, height: 8)
                                 }
                             }
                         }
-                        .padding(.horizontal)
                     }
+                    .frame(maxWidth: .infinity)
                 }
             }
         }
+        .padding(16)
+        .background(Color(.secondarySystemGroupedBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
-    
-    private var monthView: some View {
-        VStack(spacing: 0) {
-            // Month header
-            monthHeaderView
-            
-            // Calendar grid
-            calendarGridView
-            
-            // Events list for selected date
-            eventsListView
-        }
-    }
-    
-    private var monthHeaderView: some View {
-        HStack {
-            Button(action: previousMonth) {
-                Image(systemName: "chevron.left")
-                    .foregroundColor(.blue)
-                    .font(.title2)
-            }
-            
-            Spacer()
-            
-            Text(monthTitle)
-                .font(.title2)
-                .fontWeight(.bold)
-            
-            Spacer()
-            
-            Button(action: nextMonth) {
-                Image(systemName: "chevron.right")
-                    .foregroundColor(.blue)
-                    .font(.title2)
+
+    var weekdayHeader: some View {
+        HStack(spacing: 0) {
+            ForEach(["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"], id: \.self) { day in
+                Text(day)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity)
             }
         }
-        .padding(.horizontal)
-        .padding(.vertical, 10)
     }
-    
-    private var calendarGridView: some View {
-        VStack(spacing: 0) {
-            // Day headers
-            HStack(spacing: 0) {
-                ForEach(["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"], id: \.self) { day in
-                    Text(day)
-                        .font(.caption)
-                        .fontWeight(.medium)
-                        .foregroundColor(.secondary)
-                        .frame(maxWidth: .infinity)
-                }
-            }
-            .padding(.horizontal)
-            .padding(.bottom, 5)
-            
-            // Calendar days
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 7), spacing: 2) {
-                ForEach(calendarDays, id: \.self) { date in
-                    CalendarDayView(
-                        date: date,
-                        isSelected: calendar.isDate(date, inSameDayAs: selectedDate),
-                        isToday: calendar.isDateInToday(date),
-                        hasEvents: hasEventsForDate(date),
-                        isCurrentMonth: calendar.isDate(date, equalTo: currentMonth, toGranularity: .month)
-                    )
-                    .onTapGesture {
-                        selectedDate = date
-                        loadEventsForDate(date)
-                    }
-                }
-            }
-            .padding(.horizontal, 5)
-        }
-    }
-    
-    private var eventsListView: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("События на \(selectedDate, formatter: dateFormatter)")
-                .font(.headline)
-                .padding(.horizontal)
-            
-            if events.isEmpty {
-                HStack {
-                    Image(systemName: "calendar.badge.plus")
-                        .foregroundColor(.secondary)
-                    Text("Нет событий")
-                        .foregroundColor(.secondary)
-                }
-                .padding(.horizontal)
-            } else {
-                ScrollView {
-                    LazyVStack(spacing: 8) {
-                        ForEach(events, id: \.eventIdentifier) { event in
-                            EventRowView(event: event)
-                                .onTapGesture {
-                                    selectedEvent = event
-                                }
-                        }
-                    }
-                    .padding(.horizontal)
-                }
+
+    var monthGrid: some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 7), spacing: 6) {
+            ForEach(viewModel.calendarDays, id: \.self) { date in
+                CalendarDayView(
+                    date: date,
+                    isSelected: calendar.isDate(date, inSameDayAs: viewModel.selectedDate),
+                    isToday: calendar.isDateInToday(date),
+                    hasEvents: viewModel.hasItemsFor(date: date),
+                    isCurrentMonth: calendar.isDate(date, equalTo: viewModel.currentDate, toGranularity: .month)
+                )
+                .onTapGesture { viewModel.selectDate(date) }
             }
         }
-        .frame(maxHeight: 200)
+        .padding(.top, 4)
     }
-    
-    // MARK: - Computed Properties
-    
-    private var dayTitle: String {
-        dayFormatter.string(from: selectedDate)
-    }
-    
-    private var daySubtitle: String {
-        fullDateFormatter.string(from: selectedDate)
-    }
-    
-    private var weekTitle: String {
-        let start = startOfWeek(for: selectedDate)
-        let end = calendar.date(byAdding: .day, value: 6, to: start) ?? start
-        return "\(dayFormatter.string(from: start)) - \(dayFormatter.string(from: end)) \(monthYearFormatter.string(from: start))"
-    }
-    
-    private var monthTitle: String {
-        monthYearFormatter.string(from: currentMonth)
-    }
-    
-    private var weekDays: [Date] {
-        let start = startOfWeek(for: selectedDate)
+
+    var weekDays: [Date] {
+        let start = calendar.dateInterval(of: .weekOfYear, for: viewModel.currentDate)?.start ?? viewModel.currentDate
         return (0..<7).compactMap { calendar.date(byAdding: .day, value: $0, to: start) }
     }
-    
-    private var calendarDays: [Date] {
-        let startOfMonth = calendar.dateInterval(of: .month, for: currentMonth)?.start ?? currentMonth
-        let startOfCalendar = calendar.dateInterval(of: .weekOfYear, for: startOfMonth)?.start ?? startOfMonth
-        
-        var days: [Date] = []
-        for i in 0..<42 { // 6 weeks × 7 days
-            if let day = calendar.date(byAdding: .day, value: i, to: startOfCalendar) {
-                days.append(day)
+
+    var weekTitle: String {
+        let start = weekDays.first ?? viewModel.currentDate
+        let end = weekDays.last ?? start
+        return "\(shortDateFormatter.string(from: start)) – \(shortDateFormatter.string(from: end))"
+    }
+
+    var agendaRow: AgendaRowBuilder { AgendaRowBuilder(timeFormatter: timeFormatter) }
+
+    private func priorityIndicators(for date: Date) -> [Color] {
+        let tasks = viewModel.tasksFor(date: date)
+            .sorted { ($0.priority) > ($1.priority) }
+
+        if !tasks.isEmpty {
+            return tasks.prefix(3).map { priorityColor(for: $0.priority) }
+        }
+
+        let hasEvents = !viewModel.eventsFor(date: date).isEmpty
+        return hasEvents ? [Color.blue] : []
+    }
+
+    private func priorityColor(for priority: Int16) -> Color {
+        switch priority {
+        case 3: return DesignSystem.Colors.priorityHigh
+        case 2: return DesignSystem.Colors.priorityMedium
+        case 1: return DesignSystem.Colors.priorityLow
+        default: return DesignSystem.Colors.priorityNone
+        }
+    }
+}
+
+// MARK: - Agenda row builder
+private struct AgendaRowBuilder {
+    let timeFormatter: DateFormatter
+
+    func eventRow(event: EventEntity) -> some View {
+        HStack(alignment: .top, spacing: 16) {
+            if let start = event.startDate {
+                let end = event.endDate ?? start.addingTimeInterval(3600)
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(timeFormatter.string(from: start))
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                    Text(timeFormatter.string(from: end))
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+                .frame(width: 64, alignment: .trailing)
+            } else {
+                Color.clear.frame(width: 64, height: 0)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Image(systemName: "calendar")
+                        .foregroundColor(.blue)
+                    Text(event.title ?? "Событие")
+                        .font(.body)
+                        .fontWeight(.medium)
+                        .lineLimit(2)
+                }
+
+                if event.isAllDay && event.startDate != nil {
+                    Text("Весь день")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                } else if let notes = event.notes, !notes.isEmpty {
+                    Text(notes)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(2)
+                }
+            }
+            Spacer()
+        }
+        .padding(14)
+        .background(Color(.systemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .shadow(color: Color.black.opacity(0.03), radius: 4, x: 0, y: 2)
+    }
+
+    func taskRow(task: TaskEntity) -> some View {
+        HStack(alignment: .top, spacing: 16) {
+            if let due = task.dueDate {
+                Text(timeFormatter.string(from: due))
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .frame(width: 64, alignment: .trailing)
+            } else {
+                Color.clear.frame(width: 64, height: 0)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
+                        .foregroundColor(task.isCompleted ? .green : .orange)
+                    Text(task.title ?? "Задача")
+                        .font(.body)
+                        .fontWeight(.medium)
+                        .lineLimit(2)
+                }
+
+                if let notes = task.notes, !notes.isEmpty {
+                    Text(notes)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(2)
+                }
+            }
+            Spacer()
+        }
+        .padding(14)
+        .background(Color(.systemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .shadow(color: Color.black.opacity(0.03), radius: 4, x: 0, y: 2)
+    }
+}
+
+// MARK: - Detail sheet
+private struct CalendarDetailSheet: View {
+    let detail: CalendarScreen.CalendarDetail
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationView {
+            Group {
+                switch detail {
+                case .event(let event):
+                    eventContent(event)
+                case .task(let task):
+                    taskContent(task)
+                }
+            }
+            .padding()
+            .navigationTitle("Подробности")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Готово") { dismiss() }
+                }
             }
         }
-        
-        return days
     }
-    
-    // MARK: - Formatters
-    
-    private var dateFormatter: DateFormatter {
+
+    private func eventContent(_ event: EventEntity) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(event.title ?? "Событие")
+                .font(.title2)
+                .fontWeight(.semibold)
+            if let start = event.startDate {
+                let end = event.endDate ?? start.addingTimeInterval(3600)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Дата")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    Text(eventDateFormatter.string(from: start))
+                    Text("\(eventTimeFormatter.string(from: start)) – \(eventTimeFormatter.string(from: end))")
+                        .foregroundColor(.secondary)
+                }
+            }
+            if let notes = event.notes, !notes.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Описание")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    Text(notes)
+                }
+            }
+            Spacer()
+        }
+    }
+
+    private func taskContent(_ task: TaskEntity) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(task.title ?? "Задача")
+                .font(.title2)
+                .fontWeight(.semibold)
+            if let due = task.dueDate {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Дедлайн")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    Text(eventDateFormatter.string(from: due))
+                    Text(eventTimeFormatter.string(from: due))
+                        .foregroundColor(.secondary)
+                }
+            }
+            if let notes = task.notes, !notes.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Заметки")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    Text(notes)
+                }
+            }
+            Spacer()
+        }
+    }
+
+    private var eventDateFormatter: DateFormatter {
         let formatter = DateFormatter()
-        formatter.dateFormat = "d MMMM"
         formatter.locale = Locale(identifier: "ru_RU")
+        formatter.dateStyle = .long
         return formatter
     }
-    
-    private var dayFormatter: DateFormatter {
+
+    private var eventTimeFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ru_RU")
+        formatter.timeStyle = .short
+        return formatter
+    }
+}
+
+// MARK: - Formatters
+private extension CalendarScreen {
+    var viewModeBinding: Binding<CalendarViewMode> {
+        Binding(
+            get: { viewModel.viewMode },
+            set: { viewModel.switchViewMode($0) }
+        )
+    }
+
+    var longDateFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ru_RU")
+        formatter.dateFormat = "d MMMM yyyy"
+        return formatter
+    }
+
+    var shortDateFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ru_RU")
+        formatter.dateFormat = "d MMMM"
+        return formatter
+    }
+
+    var weekdayFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ru_RU")
+        formatter.dateFormat = "EEEE"
+        return formatter
+    }
+
+    var weekdayShortFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ru_RU")
+        formatter.dateFormat = "EEE"
+        return formatter
+    }
+
+    var dayNumberFormatter: DateFormatter {
         let formatter = DateFormatter()
         formatter.dateFormat = "d"
         return formatter
     }
-    
-    private var dayOfWeekFormatter: DateFormatter {
+
+    var monthYearFormatter: DateFormatter {
         let formatter = DateFormatter()
-        formatter.dateFormat = "EEE"
         formatter.locale = Locale(identifier: "ru_RU")
-        return formatter
-    }
-    
-    private var fullDateFormatter: DateFormatter {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "EEEE, d MMMM yyyy"
-        formatter.locale = Locale(identifier: "ru_RU")
-        return formatter
-    }
-    
-    private var monthYearFormatter: DateFormatter {
-        let formatter = DateFormatter()
         formatter.dateFormat = "LLLL yyyy"
-        formatter.locale = Locale(identifier: "ru_RU")
         return formatter
     }
-    
-    // MARK: - Helper Methods
-    
-    private func startOfWeek(for date: Date) -> Date {
-        let components = calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: date)
-        return calendar.date(from: components) ?? date
-    }
-    
-    private func hasEventsForDate(_ date: Date) -> Bool {
-        // Check calendar events for the date
-        let startOfDay = calendar.startOfDay(for: date)
-        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
-        
-        // Check EventKit events
-        if EKEventStore.authorizationStatus(for: .event) == .fullAccess {
-            let predicate = EKEventStore().predicateForEvents(withStart: startOfDay, end: endOfDay, calendars: nil)
-            let ekEvents = EKEventStore().events(matching: predicate)
-            if !ekEvents.isEmpty { return true }
-        }
-        
-        // Check Core Data events
-        let request: NSFetchRequest<EventEntity> = EventEntity.fetchRequest()
-        request.predicate = NSPredicate(format: "startDate >= %@ AND startDate < %@", startOfDay as NSDate, endOfDay as NSDate)
-        
-        do {
-            let coreDataEvents = try PersistenceController.shared.container.viewContext.fetch(request)
-            return !coreDataEvents.isEmpty
-        } catch {
-            return false
-        }
-    }
-    
-    // MARK: - Navigation Actions
-    
-    private func previousDay() {
-        if let newDate = calendar.date(byAdding: .day, value: -1, to: selectedDate) {
-            selectedDate = newDate
-            loadEventsForDate(selectedDate)
-        }
-    }
-    
-    private func nextDay() {
-        if let newDate = calendar.date(byAdding: .day, value: 1, to: selectedDate) {
-            selectedDate = newDate
-            loadEventsForDate(selectedDate)
-        }
-    }
-    
-    private func previousWeek() {
-        if let newDate = calendar.date(byAdding: .weekOfYear, value: -1, to: selectedDate) {
-            selectedDate = newDate
-            loadEventsForDate(selectedDate)
-        }
-    }
-    
-    private func nextWeek() {
-        if let newDate = calendar.date(byAdding: .weekOfYear, value: 1, to: selectedDate) {
-            selectedDate = newDate
-            loadEventsForDate(selectedDate)
-        }
-    }
-    
-    private func previousMonth() {
-        if let newMonth = calendar.date(byAdding: .month, value: -1, to: currentMonth) {
-            currentMonth = newMonth
-        }
-    }
-    
-    private func nextMonth() {
-        if let newMonth = calendar.date(byAdding: .month, value: 1, to: currentMonth) {
-            currentMonth = newMonth
-        }
-    }
-    
-    private func loadEvents() {
-        loadEventsForDate(selectedDate)
-    }
-    
-    private func loadEventsForDate(_ date: Date) {
-        let startOfDay = calendar.startOfDay(for: date)
-        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
-        
-        var allEvents: [EKEvent] = []
-        
-        // Load EventKit events
-        if EKEventStore.authorizationStatus(for: .event) == .fullAccess {
-            let eventStore = EKEventStore()
-            let predicate = eventStore.predicateForEvents(withStart: startOfDay, end: endOfDay, calendars: nil)
-            let ekEvents = eventStore.events(matching: predicate)
-            allEvents.append(contentsOf: ekEvents)
-        }
-        
-        // Load Core Data events and convert to EKEvent format
-        let request: NSFetchRequest<EventEntity> = EventEntity.fetchRequest()
-        request.predicate = NSPredicate(format: "startDate >= %@ AND startDate < %@", startOfDay as NSDate, endOfDay as NSDate)
-        
-        do {
-            let coreDataEvents = try PersistenceController.shared.container.viewContext.fetch(request)
-            
-            // Convert Core Data events to EKEvent objects for display
-            for eventEntity in coreDataEvents {
-                let ekEvent = EKEvent(eventStore: EKEventStore())
-                ekEvent.title = eventEntity.title
-                ekEvent.startDate = eventEntity.startDate
-                ekEvent.endDate = eventEntity.endDate
-                ekEvent.isAllDay = eventEntity.isAllDay
-                ekEvent.notes = eventEntity.notes
-                allEvents.append(ekEvent)
-            }
-        } catch {
-            print("Failed to fetch Core Data events: \(error)")
-        }
-        
-        // Sort events by start date
-        events = allEvents.sorted { ($0.startDate ?? Date()) < ($1.startDate ?? Date()) }
-    }
-}
 
-struct EventRowView: View {
-    let event: EKEvent
-    
-    var body: some View {
-        HStack {
-            Rectangle()
-                .fill(Color(event.calendar?.cgColor ?? CGColor(gray: 0.5, alpha: 1)))
-                .frame(width: 4)
-            
-            VStack(alignment: .leading, spacing: 2) {
-                Text(event.title ?? "Без названия")
-                    .font(.body)
-                    .fontWeight(.medium)
-                
-                if let startDate = event.startDate, let endDate = event.endDate {
-                    Text("\(startDate, style: .time) - \(endDate, style: .time)")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
-            
-            Spacer()
-        }
-        .padding(12)
-        .background(Color(.systemGray6))
-        .cornerRadius(8)
-    }
-}
-
-struct EventDetailView: View {
-    let event: EKEvent
-    @Environment(\.dismiss) private var dismiss
-    
-    var body: some View {
-        NavigationView {
-            VStack(alignment: .leading, spacing: 16) {
-                Text(event.title ?? "Событие без названия")
-                    .font(.title)
-                    .fontWeight(.bold)
-                
-                if let startDate = event.startDate, let endDate = event.endDate {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Дата и время")
-                            .font(.headline)
-                        Text("\(startDate, style: .date)")
-                        Text("\(startDate, style: .time) - \(endDate, style: .time)")
-                            .foregroundColor(.secondary)
-                    }
-                }
-                
-                if let notes = event.notes, !notes.isEmpty {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Заметки")
-                            .font(.headline)
-                        Text(notes)
-                            .foregroundColor(.secondary)
-                    }
-                }
-                
-                if let location = event.location, !location.isEmpty {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Место")
-                            .font(.headline)
-                        Text(location)
-                            .foregroundColor(.secondary)
-                    }
-                }
-                
-                Spacer()
-            }
-            .padding()
-            .navigationBarTitleDisplayMode(.inline)
-            .navigationBarBackButtonHidden()
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Готово") {
-                        dismiss()
-                    }
-                }
-            }
-        }
-    }
-}
-
-extension EKEvent: @retroactive Identifiable {
-    public var id: String {
-        return eventIdentifier ?? UUID().uuidString
+    var timeFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ru_RU")
+        formatter.timeStyle = .short
+        return formatter
     }
 }
 
 #Preview {
-    CalendarScreen()
+    CalendarScreen(viewModel: CalendarViewModel(context: PersistenceController.preview().container.viewContext))
 }
