@@ -20,7 +20,9 @@ enum ModelManagerError: LocalizedError {
                 ? "Этот формат не поддерживается. Выберите папку модели."
                 : "Unsupported format. Please choose a model folder."
         case .activeModelDeletion:
-            return "Нельзя удалить активную модель. Сначала выберите другую."
+            return Locale.current.identifier.lowercased().hasPrefix("ru")
+                ? "Нельзя удалить активную модель. Сначала выберите другую."
+                : "Cannot delete the active model. Choose another one first."
         }
     }
 }
