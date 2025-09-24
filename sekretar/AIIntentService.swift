@@ -693,19 +693,15 @@ final class AIIntentService: ObservableObject {
         }
 
         if let heur = heuristicEvent(from: originalInput, base: Date()) {
-            let calendar = Calendar.current
+            let durationCandidate = max(adjusted.end.timeIntervalSince(adjusted.start), heur.end.timeIntervalSince(heur.start))
+            let duration = max(durationCandidate, heur.isAllDay ? 86400 : 1800)
             if heur.isAllDay {
-                let startDay = calendar.startOfDay(for: adjusted.start)
-                let endDay = calendar.date(byAdding: .day, value: 1, to: startDay) ?? startDay.addingTimeInterval(86400)
+                let startDay = Calendar.current.startOfDay(for: heur.start)
+                let endDay = Calendar.current.date(byAdding: .day, value: 1, to: startDay) ?? heur.end
                 adjusted = EventDraft(title: adjusted.title, start: startDay, end: endDay, isAllDay: true)
             } else {
-                let components = calendar.dateComponents([.hour, .minute], from: heur.start)
-                if let hour = components.hour, let minute = components.minute,
-                   let newStart = calendar.date(bySettingHour: hour, minute: minute, second: 0, of: adjusted.start) {
-                    let duration = max(heur.end.timeIntervalSince(heur.start), 1800)
-                    let newEnd = newStart.addingTimeInterval(duration)
-                    adjusted = EventDraft(title: adjusted.title, start: newStart, end: newEnd, isAllDay: false)
-                }
+                let end = heur.start.addingTimeInterval(duration)
+                adjusted = EventDraft(title: adjusted.title, start: heur.start, end: end, isAllDay: false)
             }
         }
 
