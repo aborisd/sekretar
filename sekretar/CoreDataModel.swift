@@ -84,10 +84,12 @@ extension PersistenceController {
         let alId = NSAttributeDescription(); alId.name = "id"; alId.attributeType = .UUIDAttributeType; alId.isOptional = false
         let alAction = NSAttributeDescription(); alAction.name = "action"; alAction.attributeType = .stringAttributeType; alAction.isOptional = false
         let alPayload = NSAttributeDescription(); alPayload.name = "payload"; alPayload.attributeType = .stringAttributeType; alPayload.isOptional = true
-        let alTimestamp = NSAttributeDescription(); alTimestamp.name = "timestamp"; alTimestamp.attributeType = .dateAttributeType; alTimestamp.isOptional = false
-        let alConfidence = NSAttributeDescription(); alConfidence.name = "confidence"; alConfidence.attributeType = .doubleAttributeType; alConfidence.isOptional = false
+        let alCreatedAt = NSAttributeDescription(); alCreatedAt.name = "createdAt"; alCreatedAt.attributeType = .dateAttributeType; alCreatedAt.isOptional = false
+        let alConfidence = NSAttributeDescription(); alConfidence.name = "confidence"; alConfidence.attributeType = .floatAttributeType; alConfidence.isOptional = false
+        let alRequires = NSAttributeDescription(); alRequires.name = "requiresConfirmation"; alRequires.attributeType = .booleanAttributeType; alRequires.defaultValue = false
+        let alExecuted = NSAttributeDescription(); alExecuted.name = "isExecuted"; alExecuted.attributeType = .booleanAttributeType; alExecuted.defaultValue = false
         
-        aiActionLogEntity.properties = [alId, alAction, alPayload, alTimestamp, alConfidence]
+        aiActionLogEntity.properties = [alId, alAction, alPayload, alCreatedAt, alConfidence, alRequires, alExecuted]
 
         // Task-Project relationship
         let taskToProject = NSRelationshipDescription()

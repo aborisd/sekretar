@@ -17,10 +17,17 @@ enum AIProviderFactory {
     private static func resolveBaseURL() -> String? {
         let defaults = UserDefaults.standard
         if let s = defaults.string(forKey: "REMOTE_LLM_BASE_URL"), !s.isEmpty { return s }
-        if let url = Bundle.main.url(forResource: "RemoteLLM", withExtension: "plist"),
-           let data = try? Data(contentsOf: url),
-           let dict = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
-           let s = dict["REMOTE_LLM_BASE_URL"] as? String, !s.isEmpty { return s }
+        // In debug builds allow local plist overrides that are not tracked by git
+        #if DEBUG
+        for name in ["RemoteLLM.local", "RemoteLLM"] {
+            if let url = Bundle.main.url(forResource: name, withExtension: "plist"),
+               let data = try? Data(contentsOf: url),
+               let dict = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+               let s = dict["REMOTE_LLM_BASE_URL"] as? String, !s.isEmpty {
+                return s
+            }
+        }
+        #endif
         if let s = Bundle.main.infoDictionary?["REMOTE_LLM_BASE_URL"] as? String, !s.isEmpty { return s }
         return nil
     }

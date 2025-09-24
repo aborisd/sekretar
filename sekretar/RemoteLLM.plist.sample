@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Base URL of your OpenAI-compatible server (vLLM/OpenRouter/etc.) -->
+  <key>REMOTE_LLM_BASE_URL</key>
+  <string>https://your-llm-host.example.com</string>
+
+  <!-- Model id/name (OpenAI-compatible) -->
+  <key>REMOTE_LLM_MODEL</key>
+  <string>mistralai/Mistral-7B-Instruct-v0.2</string>
+
+  <!-- API key (optional for local/self-host). Do NOT commit real keys. -->
+  <key>REMOTE_LLM_API_KEY</key>
+  <string>sk-PLACEHOLDER</string>
+
+  <!-- Optional tuning -->
+  <key>REMOTE_LLM_MAX_TOKENS</key>
+  <string>384</string>
+  <key>REMOTE_LLM_TEMPERATURE</key>
+  <string>0.6</string>
+
+  <!-- Optional etiquette headers for OpenRouter (not required for self-host) -->
+  <key>REMOTE_LLM_HTTP_REFERER</key>
+  <string>https://example.com</string>
+  <key>REMOTE_LLM_HTTP_TITLE</key>
+  <string>Sekretar (Local Dev)</string>
+</dict>
+</plist>

@@ -15,6 +15,7 @@ struct DemoContentView: View {
     @Environment(\.managedObjectContext) private var context
     @State private var selectedTab = 0
     @State private var showChat = false
+    @State private var pendingFocusDate: Date? = nil
 
     var body: some View {
         ZStack { // Overlay кнопку чата поверх TabBar, чтобы она не пряталась на маленьких экранах
@@ -31,7 +32,7 @@ struct DemoContentView: View {
 
                     // Вкладка "Календарь"
                     NavigationView {
-                        CalendarView()
+                        CalendarScreen()
                     }
                     .navigationViewStyle(.stack)
                     .tag(1)
@@ -76,6 +77,19 @@ struct DemoContentView: View {
         }
         .sheet(isPresented: $showChat) {
             NavigationView { ChatScreen() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .openCalendarOn)) { note in
+            if let d = note.userInfo?["date"] as? Date { pendingFocusDate = d }
+            selectedTab = 1
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                if let d = pendingFocusDate {
+                    NotificationCenter.default.post(name: .focusCalendarDate, object: nil, userInfo: ["date": d])
+                    pendingFocusDate = nil
+                }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .openTasksOn)) { _ in
+            selectedTab = 2
         }
     }
 }

@@ -51,6 +51,12 @@ struct CalendarScreen: View {
             .onAppear {
                 loadEvents()
             }
+            .onReceive(NotificationCenter.default.publisher(for: .focusCalendarDate)) { note in
+                if let d = note.userInfo?["date"] as? Date {
+                    selectedDate = d
+                    loadEventsForDate(d)
+                }
+            }
             .sheet(item: $selectedEvent) { event in
                 EventDetailView(event: event)
             }

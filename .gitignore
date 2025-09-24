@@ -55,3 +55,4 @@ server/.env
 
 # Local iOS secrets (do not commit real keys)
 sekretar/RemoteLLM.plist
+sekretar/RemoteLLM.local.plist

@@ -40,5 +40,9 @@
     <string>Приложению нужен доступ к календарю для событий (без изменений).</string>
     <key>NSCalendarsUsageDescription</key>
     <string>Приложению нужен доступ к календарю для событий (без изменений).</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>Голосовой ввод помогает быстрее формулировать задачи и запросы.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Микрофон используется для голосового ввода в чате.</string>
 </dict>
 </plist>

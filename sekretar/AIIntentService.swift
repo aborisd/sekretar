@@ -10,9 +10,12 @@ final class AIIntentService: ObservableObject {
     @Published var isProcessing = false
     @Published var pendingAction: AIAction?
     @Published var showingPreview = false
+    @Published var lastResultToast: String?
+    @Published var lastOpenLink: OpenLink?
     
     private let llmProvider: LLMProviderProtocol
     private let context: NSManagedObjectContext
+    private var lastAppliedEventIDs: [UUID] = []
     
     init(context: NSManagedObjectContext = PersistenceController.shared.container.viewContext,
          llmProvider: LLMProviderProtocol = AIProviderFactory.current()) {
@@ -22,26 +25,70 @@ final class AIIntentService: ObservableObject {
     
     // MARK: - Main Processing Method
     func processUserInput(_ input: String) async {
+        if Task.isCancelled { return }
         isProcessing = true
         defer { isProcessing = false }
         
         do {
-            // Step 1: Parse user intent
+            try Task.checkCancellation()
+            // Step 1: Heuristic intent detection (RU/EN) before LLM
+            if let forced = forcedIntent(from: input) {
+                // Generate action via local/JSON helpers without relying on free-form chat
+                let action = try await generateAction(for: forced, input: input)
+                let validationResult = try await validateAction(action)
+                if validationResult.isValid {
+                    if shouldAutoApply(action: action, originalInput: input, forced: true) {
+                        try await executeAction(action)
+                        try await logAIAction(action)
+                        emitToast(successToast(for: action))
+                        pendingAction = nil
+                        showingPreview = false
+                    } else {
+                        pendingAction = action
+                        showingPreview = true
+                        try await logAIAction(action)
+                    }
+                } else {
+                    let clarificationAction = AIAction(
+                        type: .requestClarification,
+                        title: "Need More Information",
+                        description: validationResult.errorMessage ?? "Could you provide more details?",
+                        confidence: 0.9,
+                        requiresConfirmation: true,
+                        payload: ["original_input": input]
+                    )
+                    pendingAction = clarificationAction
+                    showingPreview = true
+                }
+                return
+            }
+
+            // Step 1 (fallback): Parse user intent via LLM provider
+            try Task.checkCancellation()
             let intent = try await llmProvider.detectIntent(input)
             
             // Step 2: Generate structured action based on intent
+            try Task.checkCancellation()
             let action = try await generateAction(for: intent, input: input)
             
             // Step 3: Validate the action
+            try Task.checkCancellation()
             let validationResult = try await validateAction(action)
             
             // Step 4: Show preview if action is valid
             if validationResult.isValid {
-                pendingAction = action
-                showingPreview = true
-                
-                // Log action for undo/redo
-                try await logAIAction(action)
+                if shouldAutoApply(action: action, originalInput: input, forced: false) {
+                    try await executeAction(action)
+                    try await logAIAction(action)
+                    emitToast(successToast(for: action))
+                    pendingAction = nil
+                    showingPreview = false
+                } else {
+                    pendingAction = action
+                    showingPreview = true
+                    // Log action for undo/redo
+                    try await logAIAction(action)
+                }
             } else {
                 // Show error or ask for clarification
                 let clarificationAction = AIAction(
@@ -56,6 +103,8 @@ final class AIIntentService: ObservableObject {
                 showingPreview = true
             }
             
+        } catch is CancellationError {
+            // silently ignore
         } catch {
             print("Error processing user input: \(error)")
             let errorAction = AIAction(
@@ -69,6 +118,33 @@ final class AIIntentService: ObservableObject {
             pendingAction = errorAction
             showingPreview = true
         }
+    }
+
+    // MARK: - Heuristics (deterministic router)
+    private func forcedIntent(from input: String) -> UserIntent? {
+        let s = input.lowercased()
+        func any(_ arr: [String]) -> Bool { arr.contains { s.contains($0) } }
+        // If phrase mentions meeting/calendar explicitly → scheduling
+        if any(["встреч", "в календар"]) { return .scheduleTask }
+        // Create task when verbs + (task noun OR generic command with time window)
+        if any(["создай","добавь","создать","добавить","поставь","занеси"]) {
+            if any(["задач","task"]) { return .createTask }
+            // если есть окно времени и нет слова встречи — считаем задачей
+            if hasTimeRangeOrPoint(in: s) && !any(["встреч"]) { return .createTask }
+        }
+        // Time range present? If не указана задача/встреча, считаем это планированием
+        if hasTimeRangeOrPoint(in: s) { return .scheduleTask }
+        // Scheduling verbs
+        if any(["запланируй","подбери","найди","распиши","назначь","schedule"]) { return .scheduleTask }
+        return nil
+    }
+
+    private func hasTimeRangeOrPoint(in s: String) -> Bool {
+        // quick check for digits or common words
+        if s.range(of: #"\b([01]?\d|2[0-3])([:.][0-5]\d)?\b"#, options: .regularExpression) != nil { return true }
+        if ["час", "часа", "пол", "три", "четыр", "пять", "шесть", "семь", "восемь", "девять", "десять", "одиннадцать", "двенадцать"].contains(where: { s.contains($0) }) { return true }
+        if s.contains("с ") && s.contains(" до ") { return true }
+        return false
     }
     
     // MARK: - Action Execution
@@ -87,7 +163,12 @@ final class AIIntentService: ObservableObject {
         case .deleteEvent:
             try await executeDeleteEvent(action)
         case .suggestTimeSlots:
-            try await executeSuggestTimeSlots(action)
+            // If suggestions already present in payload, apply them; else compute
+            if let suggestions = action.payload["suggestions"] as? [[String: Any]], !suggestions.isEmpty {
+                try await applyScheduleSuggestions(suggestions, actionPayload: action.payload)
+            } else {
+                try await executeSuggestTimeSlots(action)
+            }
         case .prioritizeTasks:
             try await executePrioritizeTasks(action)
         case .requestClarification, .showError:
@@ -114,7 +195,13 @@ final class AIIntentService: ObservableObject {
         case .deleteTask:
             return try await generateDeleteTaskAction(input: input)
         case .scheduleTask:
-            return try await generateScheduleTaskAction(input: input)
+            // Если пользователь явно создаёт встречу/событие — сформируем событие, иначе подберём слоты
+            let lower = input.lowercased()
+            if ["встреч", "митинг", "meeting", "событ", "event", "calendar"].contains(where: { lower.contains($0) }) {
+                return try await generateCreateEventAction(input: input)
+            } else {
+                return try await generateScheduleTaskAction(input: input)
+            }
         case .requestSuggestion:
             return try await generateSuggestionAction(input: input)
         case .askQuestion:
@@ -133,7 +220,17 @@ final class AIIntentService: ObservableObject {
     
     private func generateCreateTaskAction(input: String) async throws -> AIAction {
         let analysis = try await llmProvider.analyzeTask(input)
-        
+        // Try to extract schedule from phrase (via parseEvent to reuse NL parsing)
+        var startDate: Date? = nil
+        var endDate: Date? = nil
+        do {
+            let draft = try await llmProvider.parseEvent(input)
+            // Consider it a schedule only if duration >= 15m
+            if draft.end.timeIntervalSince(draft.start) >= 15 * 60 {
+                startDate = draft.start; endDate = draft.end
+            }
+        } catch {}
+
         // Extract task title from input (simple approach)
         let title = extractTaskTitle(from: input)
         
@@ -143,13 +240,15 @@ final class AIIntentService: ObservableObject {
             "notes": input,
             "category": analysis.category,
             "estimated_duration": analysis.estimatedDuration,
-            "suggested_tags": analysis.suggestedTags
+            "suggested_tags": analysis.suggestedTags,
+            "start": startDate as Any,
+            "end": endDate as Any
         ]
         
         return AIAction(
             type: .createTask,
             title: "Create Task",
-            description: "Create task: \"\(title)\" with priority \(analysis.suggestedPriority)",
+            description: startDate != nil ? "Create task and schedule time window" : "Create task: \"\(title)\" with priority \(analysis.suggestedPriority)",
             confidence: 0.85,
             requiresConfirmation: true,
             payload: payload
@@ -199,6 +298,24 @@ final class AIIntentService: ObservableObject {
             confidence: 0.9,
             requiresConfirmation: false,
             payload: ["context": input]
+        )
+    }
+
+    private func generateCreateEventAction(input: String) async throws -> AIAction {
+        let draft = try await llmProvider.parseEvent(input)
+        let payload: [String: Any] = [
+            "title": draft.title.isEmpty ? "Событие" : draft.title,
+            "start": draft.start,
+            "end": draft.end,
+            "is_all_day": draft.isAllDay
+        ]
+        return AIAction(
+            type: .createEvent,
+            title: "Создать событие",
+            description: "\(payload["title"] as? String ?? "Событие") — \(draft.start.formatted(date: .abbreviated, time: .shortened))",
+            confidence: 0.8,
+            requiresConfirmation: true,
+            payload: payload
         )
     }
     
@@ -277,7 +394,7 @@ final class AIIntentService: ObservableObject {
         guard let title = action.payload["title"] as? String else {
             throw AIError.missingRequiredField("title")
         }
-        
+        var due: Date? = action.payload["start"] as? Date
         await context.perform {
             let task = TaskEntity(context: self.context)
             task.id = UUID()
@@ -287,13 +404,32 @@ final class AIIntentService: ObservableObject {
             task.isCompleted = false
             task.createdAt = Date()
             task.updatedAt = Date()
-            
-            if let duration = action.payload["estimated_duration"] as? TimeInterval {
-                // Could set due date based on estimated duration
-                task.dueDate = Date().addingTimeInterval(duration * 2) // Give 2x the estimated time
-            }
+            // Если распознали окно — используем как dueDate, иначе можно поставить nil
+            task.dueDate = due
             
             try? self.context.save()
+        }
+        // Предложим открыть список задач на соответствующую дату
+        self.lastOpenLink = OpenLink(tab: .tasks, date: due)
+
+        // If schedule is present, create a calendar event, too
+        if let start = action.payload["start"] as? Date,
+           let end = action.payload["end"] as? Date,
+           end > start {
+            await context.perform {
+                let ev = EventEntity(context: self.context)
+                ev.id = UUID()
+                ev.title = title
+                ev.startDate = start
+                ev.endDate = end
+                ev.isAllDay = false
+                ev.notes = "Создано при добавлении задачи"
+                try? self.context.save()
+            }
+            if let created = try? await fetchEvent(byTitle: title, start: start, end: end) {
+                try? await EventKitService(context: context).syncToEventKit(created)
+            }
+            self.lastOpenLink = OpenLink(tab: .calendar, date: start)
         }
     }
     
@@ -308,7 +444,27 @@ final class AIIntentService: ObservableObject {
     }
     
     private func executeCreateEvent(_ action: AIAction) async throws {
-        // Implementation for event creation
+        guard let title = action.payload["title"] as? String, !title.isEmpty else {
+            throw AIError.missingRequiredField("title")
+        }
+        let start = action.payload["start"] as? Date ?? Date().addingTimeInterval(3600)
+        let end = action.payload["end"] as? Date ?? start.addingTimeInterval(3600)
+        let isAllDay = action.payload["is_all_day"] as? Bool ?? false
+
+        var created: EventEntity?
+        await context.perform {
+            let ev = EventEntity(context: self.context)
+            ev.id = UUID()
+            ev.title = title
+            ev.startDate = start
+            ev.endDate = end
+            ev.isAllDay = isAllDay
+            ev.notes = action.payload["notes"] as? String
+            try? self.context.save()
+            created = ev
+        }
+        if let created { try? await EventKitService(context: context).syncToEventKit(created) }
+        self.lastOpenLink = OpenLink(tab: .calendar, date: start)
     }
     
     private func executeUpdateEvent(_ action: AIAction) async throws {
@@ -326,9 +482,134 @@ final class AIIntentService: ObservableObject {
         
         // Update the action with suggestions
         var updatedPayload = action.payload
-        updatedPayload["suggestions"] = optimization.optimizedTasks
+        let df = ISO8601DateFormatter()
+        df.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let suggestions: [[String: Any]] = optimization.optimizedTasks.map { item in
+            [
+                "task_id": item.taskId.uuidString,
+                "suggested_start": df.string(from: item.suggestedStartTime),
+                "suggested_duration_sec": Int(item.suggestedDuration),
+                "confidence": item.confidence
+            ]
+        }
+        updatedPayload["suggestions"] = suggestions
         updatedPayload["reasoning"] = optimization.reasoning
         updatedPayload["productivity_score"] = optimization.productivityScore
+
+        let title = "Suggested Time Slots"
+        let desc = suggestions.isEmpty ? "No suitable free slots found." : "Found \(suggestions.count) suggestion(s). Review and confirm to apply."
+        let preview = AIAction(
+            type: .suggestTimeSlots,
+            title: title,
+            description: desc,
+            confidence: 0.85,
+            requiresConfirmation: true,
+            payload: updatedPayload
+        )
+        pendingAction = preview
+        showingPreview = true
+    }
+
+    private func applyScheduleSuggestions(_ suggestions: [[String: Any]], actionPayload: [String: Any]) async throws {
+        let df = ISO8601DateFormatter()
+        df.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+        // Create events for each suggestion
+        var createdEventIDs: [UUID] = []
+        for item in suggestions {
+            guard let idStr = item["task_id"] as? String,
+                  let taskId = UUID(uuidString: idStr),
+                  let startStr = item["suggested_start"] as? String,
+                  let startDate = df.date(from: startStr) ?? ISO8601DateFormatter().date(from: startStr)
+            else { continue }
+
+            let durationSec = (item["suggested_duration_sec"] as? Int) ?? 3600
+            let endDate = startDate.addingTimeInterval(TimeInterval(durationSec))
+
+            // Fetch task title if available
+            let title = await fetchTaskTitle(by: taskId) ?? "Запланированная задача"
+
+            await context.perform {
+                let event = EventEntity(context: self.context)
+                let eid = UUID()
+                event.id = eid
+                event.title = title
+                event.startDate = startDate
+                event.endDate = endDate
+                event.isAllDay = false
+                event.notes = "Создано ИИ (расписание)"
+                try? self.context.save()
+                createdEventIDs.append(eid)
+            }
+
+            // Try to sync with system calendar (best-effort)
+            let svc = EventKitService(context: context)
+            if let created = try? await fetchEvent(byTitle: title, start: startDate, end: endDate) {
+                try? await svc.syncToEventKit(created)
+            }
+        }
+
+        // After applying, clear preview
+        pendingAction = nil
+        showingPreview = false
+
+        // Save applied ids for undo
+        lastAppliedEventIDs = createdEventIDs
+
+        // Log action
+        let payload: [String: Any] = [
+            "action": "apply_schedule",
+            "event_ids": createdEventIDs.map { $0.uuidString },
+            "reasoning": actionPayload["reasoning"] ?? "",
+            "productivity_score": actionPayload["productivity_score"] ?? 0
+        ]
+        try? await logAIAction(AIAction(type: .createEvent, title: "Apply Schedule", description: "Events created", confidence: 1.0, requiresConfirmation: false, payload: payload))
+    }
+
+    // Simple undo for the last applied schedule
+    func undoLastAppliedSchedule() async {
+        guard !lastAppliedEventIDs.isEmpty else { return }
+        let ids = lastAppliedEventIDs
+        lastAppliedEventIDs.removeAll()
+        let svc = EventKitService(context: context)
+        await context.perform {
+            for id in ids {
+                let fr: NSFetchRequest<EventEntity> = EventEntity.fetchRequest()
+                fr.fetchLimit = 1
+                fr.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+                if let ev = try? self.context.fetch(fr).first {
+                    // Try delete from EventKit if linked
+                    if let ekid = ev.eventKitId { Task { try? await svc.deleteFromEventKit(eventKitId: ekid) } }
+                    self.context.delete(ev)
+                }
+            }
+            try? self.context.save()
+        }
+    }
+
+    private func fetchTaskTitle(by id: UUID) async -> String? {
+        return await context.perform {
+            let fr: NSFetchRequest<TaskEntity> = TaskEntity.fetchRequest()
+            fr.fetchLimit = 1
+            fr.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+            if let task = try? self.context.fetch(fr).first {
+                return task.title
+            }
+            return nil
+        }
+    }
+
+    private func fetchEvent(byTitle title: String, start: Date, end: Date) async throws -> EventEntity? {
+        return try await context.perform {
+            let fr: NSFetchRequest<EventEntity> = EventEntity.fetchRequest()
+            fr.fetchLimit = 1
+            fr.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [
+                NSPredicate(format: "title == %@", title),
+                NSPredicate(format: "startDate == %@", start as CVarArg),
+                NSPredicate(format: "endDate == %@", end as CVarArg)
+            ])
+            return try self.context.fetch(fr).first
+        }
     }
     
     private func executePrioritizeTasks(_ action: AIAction) async throws {
@@ -338,23 +619,24 @@ final class AIIntentService: ObservableObject {
     // MARK: - Helper Methods
     
     private func extractTaskTitle(from input: String) -> String {
-        let lowercased = input.lowercased()
-        
-        // Remove common prefixes
-        let prefixes = ["create a task to ", "add a task to ", "i need to ", "create task ", "add task "]
-        for prefix in prefixes {
-            if lowercased.hasPrefix(prefix) {
-                return String(input.dropFirst(prefix.count)).trimmingCharacters(in: .whitespaces)
-            }
-        }
-        
-        // If no prefix found, use the whole input but limit length
-        let maxLength = 50
-        if input.count > maxLength {
-            return String(input.prefix(maxLength)) + "..."
-        }
-        
-        return input.trimmingCharacters(in: .whitespaces)
+        // Удаляем служебные слова, время и команды, чтобы не дублировать фразу целиком
+        var s = input
+        let verbs = [
+            "создай","создать","добавь","добавить","поставь","занеси",
+            "create a task to ","add a task to ","i need to ","create task ","add task "
+        ]
+        for v in verbs { s = s.replacingOccurrences(of: v, with: " ", options: .caseInsensitive) }
+        // Слова "задачу/task"
+        ["задачу","задача","task"].forEach { s = s.replacingOccurrences(of: $0, with: " ", options: .caseInsensitive) }
+        // Удаляем указания времени (аналогичные эвенты)
+        s = s.replacingOccurrences(of: #"\bв\s*([01]?\d|2[0-3])([:\\.][0-5]\d)?\b"#, with: " ", options: .regularExpression)
+        ["сегодня","завтра","послезавтра","today","tomorrow","day after","утра","вечера","дня","ночи"].forEach { s = s.replacingOccurrences(of: $0, with: " ", options: .caseInsensitive) }
+        s = s.replacingOccurrences(of: #"с\s*([01]?\d|2[0-3])([:\\.][0-5]\d)?\s*до\s*([01]?\d|2[0-3])([:\\.][0-5]\d)?"#, with: " ", options: .regularExpression)
+
+        let cleaned = s.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if cleaned.isEmpty { return "Задача" }
+        return cleaned.prefix(1).uppercased() + cleaned.dropFirst()
     }
     
     private func fetchCurrentTasks() async throws -> [TaskSummary] {
@@ -385,17 +667,90 @@ final class AIIntentService: ObservableObject {
             log.action = action.type.rawValue
             log.payload = self.encodePayload(action.payload)
             log.createdAt = Date()
-            log.confidence = Float(action.confidence)
+            // Avoid CoreData scalar type mismatches across model changes: store confidence inside payload only
             log.requiresConfirmation = action.requiresConfirmation
             log.isExecuted = false
             
             try? self.context.save()
         }
     }
+
+    // MARK: - Auto-apply helpers
+    private func shouldAutoApply(action: AIAction, originalInput: String, forced: Bool) -> Bool {
+        guard FeatureFlags.shared.autoApplyEnabled else { return false }
+        switch action.type {
+        case .createTask:
+            // Простое название + нет явных предупреждений
+            return forced || action.confidence >= 0.8
+        case .createEvent:
+            // Есть валидные даты
+            if action.payload["start"] is Date, action.payload["end"] is Date {
+                return forced || action.confidence >= 0.8
+            }
+            return false
+        default:
+            return false
+        }
+    }
+
+    private func successToast(for action: AIAction) -> String {
+        switch action.type {
+        case .createTask:
+            let title = (action.payload["title"] as? String) ?? "Задача"
+            return "✅ Задача создана: \(title)"
+        case .createEvent:
+            let title = (action.payload["title"] as? String) ?? "Событие"
+            if let start = action.payload["start"] as? Date {
+                return "✅ Событие: \(title) — \(start.formatted(date: .abbreviated, time: .shortened))"
+            }
+            return "✅ Событие создано: \(title)"
+        case .suggestTimeSlots:
+            return "✅ Предложены временные слоты"
+        default:
+            return "✅ Действие выполнено"
+        }
+    }
+
+    private func emitToast(_ text: String) {
+        lastResultToast = text
+        // сбрасываем на следующем тике, чтобы не трогать View прямо во время обновления
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+            self?.lastResultToast = nil
+        }
+    }
     
     private func encodePayload(_ payload: [String: Any]) -> String {
+        // Преобразуем в JSON‑дружелюбные типы (Date/UUID/Dict/Array → строковые представления)
+        func makeJSONSafe(_ any: Any) -> Any {
+            switch any {
+            case let d as Date:
+                let df = ISO8601DateFormatter(); df.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                return df.string(from: d)
+            case let u as UUID:
+                return u.uuidString
+            case let num as NSNumber:
+                return num
+            case let s as String:
+                return s
+            case let b as Bool:
+                return b
+            case is NSNull:
+                return NSNull()
+            case let data as Data:
+                return data.base64EncodedString()
+            case let arr as [Any]:
+                return arr.map { makeJSONSafe($0) }
+            case let dict as [String: Any]:
+                var out: [String: Any] = [:]
+                for (k, v) in dict { out[k] = makeJSONSafe(v) }
+                return out
+            default:
+                return String(describing: any)
+            }
+        }
+        let safe = payload.mapValues { makeJSONSafe($0) }
         do {
-            let data = try JSONSerialization.data(withJSONObject: payload, options: [])
+            let data = try JSONSerialization.data(withJSONObject: safe, options: [])
             return String(data: data, encoding: .utf8) ?? "{}"
         } catch {
             return "{}"
@@ -408,12 +763,15 @@ final class AIIntentService: ObservableObject {
         guard let action = pendingAction else { return }
         
         do {
+            isProcessing = true
             try await executeAction(action)
             pendingAction = nil
             showingPreview = false
+            isProcessing = false
         } catch {
             print("Error executing action: \(error)")
             // Show error to user
+            isProcessing = false
         }
     }
     
@@ -425,7 +783,8 @@ final class AIIntentService: ObservableObject {
 
 // MARK: - Data Models
 
-struct AIAction {
+struct AIAction: Identifiable {
+    let id = UUID()
     let type: AIActionType
     let title: String
     let description: String
@@ -499,7 +858,4 @@ enum AIError: LocalizedError {
     }
 }
 
-// MARK: - Analytics Extension
-extension AnalyticsEvent {
-    static let aiActionExecuted = AnalyticsEvent(rawValue: "ai_action_executed")!
-}
+// MARK: - Analytics (no extension needed; case is defined in AnalyticsEvent)

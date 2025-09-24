@@ -18,6 +18,7 @@ enum AnalyticsEvent: String, CaseIterable {
     case aiPromptSubmitted = "ai_prompt_submitted"
     case aiSuggestionAccepted = "ai_suggestion_accepted"
     case aiSuggestionRejected = "ai_suggestion_rejected"
+    case aiActionExecuted = "ai_action_executed"
     case reminderScheduled = "reminder_scheduled"
     case reminderMissed = "reminder_missed"
     case reminderSnoozed = "reminder_snoozed"

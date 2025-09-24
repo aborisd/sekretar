@@ -72,4 +72,9 @@ final class MLCLLMProvider: LLMProviderProtocol {
         // TODO: On-device intent detection via JSON
         return try await fallback.detectIntent(input)
     }
+
+    func parseEvent(_ description: String) async throws -> EventDraft {
+        // TODO: On-device JSON parsing; fallback for now
+        return try await fallback.parseEvent(description)
+    }
 }

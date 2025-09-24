@@ -6,11 +6,13 @@ struct TaskListView: View {
     @StateObject var viewModel: TaskListViewModel
     @State private var quickText = ""
     @State private var showingNewTask = false
+    @State private var draftTask: TaskEntity? = nil
     // Navigation state for editor
     @State private var showEditor = false
     @State private var selectedTaskID: NSManagedObjectID?
 
     @FetchRequest private var tasks: FetchedResults<TaskEntity>
+    // Без режима множественного редактирования
 
     init(viewModel: TaskListViewModel) {
         _viewModel = StateObject(wrappedValue: viewModel)
@@ -40,9 +42,14 @@ struct TaskListView: View {
             }
             .navigationTitle("Задачи")
             .navigationBarTitleDisplayMode(.large)
+            .toolbar {}
             .onAppear { cleanupEmptyDraftTasks() }
-            .sheet(isPresented: $showingNewTask) {
-                TaskEditorView(task: createNewTask())
+            .sheet(isPresented: $showingNewTask, onDismiss: { draftTask = nil }) {
+                if let task = draftTask {
+                    TaskEditorView(task: task)
+                } else {
+                    Text("Черновик не создан")
+                }
             }
             .navigationDestination(isPresented: $showEditor) {
                 if let id = selectedTaskID,
@@ -67,6 +74,8 @@ struct TaskListView: View {
             
             HStack {
                 Button("Новая задача") {
+                    // Создаём черновик ровно один раз на показ sheet
+                    if draftTask == nil { draftTask = createNewTask() }
                     showingNewTask = true
                 }
                 .foregroundColor(.blue)

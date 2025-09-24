@@ -13,6 +13,7 @@ enum FeatureFlag: String, CaseIterable {
     case aiFeatures = "ai_features"
     case eventKitIntegration = "eventkit_integration"
     case voiceInput = "voice_input"
+    case autoApplyIntents = "auto_apply_intents"
     case smartReminders = "smart_reminders"
     
     // UI Features
@@ -49,7 +50,11 @@ enum FeatureFlag: String, CaseIterable {
             return false
         
         // Enabled in M2
-        case .autoScheduling, .voiceInput, .projectsOrganization:
+        case .autoScheduling, .projectsOrganization:
+            return false
+        case .voiceInput:
+            return true
+        case .autoApplyIntents:
             return false
         
         // Experimental - off by default
@@ -78,6 +83,7 @@ enum FeatureFlag: String, CaseIterable {
         case .eventKitIntegration: return "System calendar integration"
         case .voiceInput: return "Speech-to-text for task creation"
         case .smartReminders: return "Intelligent notification timing"
+        case .autoApplyIntents: return "Auto-apply obvious intents without confirmation"
         case .widgets: return "Home screen widgets"
         case .darkMode: return "Dark mode support"
         case .tabletUI: return "iPad-optimized interface"
@@ -186,6 +192,7 @@ extension FeatureFlags {
     var debugModeEnabled: Bool { isEnabled(.debugMode) }
     var voiceInputEnabled: Bool { isEnabled(.voiceInput) }
     var autoSchedulingEnabled: Bool { isEnabled(.autoScheduling) }
+    var autoApplyEnabled: Bool { isEnabled(.autoApplyIntents) }
     var useInMemoryStoreForDev: Bool { isEnabled(.useInMemoryStore) }
 }
 

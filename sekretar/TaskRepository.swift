@@ -6,6 +6,8 @@ protocol TaskRepository {
     func update(_ task: TaskEntity, title: String, notes: String?, dueDate: Date?, priority: Int16) async throws
     func toggleComplete(_ task: TaskEntity) async throws
     func delete(_ task: TaskEntity) async throws
+    func bulkComplete(_ tasks: [TaskEntity]) async throws
+    func bulkDelete(_ tasks: [TaskEntity]) async throws
 }
 
 final class TaskRepositoryCD: TaskRepository {
@@ -47,5 +49,21 @@ final class TaskRepositoryCD: TaskRepository {
             try self.context.save()
         }
     }
-}
 
+    func bulkComplete(_ tasks: [TaskEntity]) async throws {
+        guard !tasks.isEmpty else { return }
+        try await context.perform {
+            let now = Date()
+            for t in tasks { t.isCompleted = true; t.updatedAt = now }
+            try self.context.save()
+        }
+    }
+
+    func bulkDelete(_ tasks: [TaskEntity]) async throws {
+        guard !tasks.isEmpty else { return }
+        try await context.perform {
+            for t in tasks { self.context.delete(t) }
+            try self.context.save()
+        }
+    }
+}

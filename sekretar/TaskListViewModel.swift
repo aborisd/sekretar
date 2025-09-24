@@ -33,6 +33,18 @@ final class TaskListViewModel: ObservableObject {
             await showError("Failed to delete task: \(error.localizedDescription)")
         } 
     }
+
+    func bulkComplete(_ tasks: [TaskEntity]) async {
+        guard !tasks.isEmpty else { return }
+        do { try await repo.bulkComplete(tasks) }
+        catch { await showError("Failed to complete tasks: \(error.localizedDescription)") }
+    }
+
+    func bulkDelete(_ tasks: [TaskEntity]) async {
+        guard !tasks.isEmpty else { return }
+        do { try await repo.bulkDelete(tasks) }
+        catch { await showError("Failed to delete tasks: \(error.localizedDescription)") }
+    }
     
     @MainActor
     private func showError(_ message: String) {
@@ -40,4 +52,3 @@ final class TaskListViewModel: ObservableObject {
         isShowingError = true
     }
 }
-

@@ -7,6 +7,7 @@ protocol LLMProviderProtocol {
     func generateSmartSuggestions(_ context: String) async throws -> [SmartSuggestion]
     func optimizeSchedule(_ tasks: [TaskSummary]) async throws -> ScheduleOptimization
     func detectIntent(_ input: String) async throws -> UserIntent
+    func parseEvent(_ description: String) async throws -> EventDraft
 }
 
 // MARK: - Data Models
@@ -107,6 +108,14 @@ struct OptimizedTask {
     let confidence: Double
 }
 
+// Event draft extracted from natural language
+struct EventDraft {
+    let title: String
+    let start: Date
+    let end: Date
+    let isAllDay: Bool
+}
+
 enum UserIntent: String, CaseIterable {
     case createTask = "create_task"
     case modifyTask = "modify_task"
@@ -151,8 +160,7 @@ final class EnhancedLLMProvider: LLMProviderProtocol {
     private init() {}
     
     func generateResponse(_ prompt: String) async throws -> String {
-        // Smart response generation based on context
-        try await Task.sleep(nanoseconds: 800_000_000) // 0.8 second delay
+        // Smart response generation based on context (без искусственной задержки)
         
         let intent = try await detectIntent(prompt)
         
@@ -175,7 +183,7 @@ final class EnhancedLLMProvider: LLMProviderProtocol {
     }
     
     func analyzeTask(_ taskDescription: String) async throws -> TaskAnalysis {
-        try await Task.sleep(nanoseconds: 600_000_000) // 0.6 second delay
+        // убрана искусственная задержка
         
         let words = taskDescription.split(separator: " ")
         let lowercaseTask = taskDescription.lowercased()
@@ -243,7 +251,7 @@ final class EnhancedLLMProvider: LLMProviderProtocol {
     }
     
     func generateSmartSuggestions(_ context: String) async throws -> [SmartSuggestion] {
-        try await Task.sleep(nanoseconds: 400_000_000) // 0.4 second delay
+        // убрана искусственная задержка
         
         // Context-aware suggestions
         let suggestions = [
@@ -286,7 +294,7 @@ final class EnhancedLLMProvider: LLMProviderProtocol {
     }
     
     func optimizeSchedule(_ tasks: [TaskSummary]) async throws -> ScheduleOptimization {
-        try await Task.sleep(nanoseconds: 1_000_000_000) // 1 second delay for complex optimization
+        // убрана искусственная задержка
         
         let now = Date()
         let calendar = Calendar.current
@@ -366,24 +374,44 @@ final class EnhancedLLMProvider: LLMProviderProtocol {
     }
     
     func detectIntent(_ input: String) async throws -> UserIntent {
-        let lowercaseInput = input.lowercased()
-        
-        // Enhanced intent detection with better patterns
-        if lowercaseInput.matches(patterns: ["create", "add", "new task", "make a", "i need to"]) {
+        let s = input.lowercased()
+        // RU/EN create task
+        if s.containsAny(["создай", "добавь", "создать", "добавить"]) && s.containsAny(["задач", "task"]) {
             return .createTask
-        } else if lowercaseInput.matches(patterns: ["edit", "modify", "change", "update", "fix"]) {
-            return .modifyTask
-        } else if lowercaseInput.matches(patterns: ["delete", "remove", "cancel", "get rid of"]) {
-            return .deleteTask
-        } else if lowercaseInput.matches(patterns: ["schedule", "when should", "what time", "plan"]) {
-            return .scheduleTask
-        } else if lowercaseInput.matches(patterns: ["suggest", "recommend", "help me", "what should"]) {
-            return .requestSuggestion
-        } else if lowercaseInput.matches(patterns: ["?", "how", "what", "why", "when", "where"]) {
-            return .askQuestion
-        } else {
-            return .unknown
         }
+        if s.containsAny(["create", "add", "new task", "make a", "i need to"]) {
+            return .createTask
+        }
+        // Modify / update
+        if s.containsAny(["измени", "изменить", "обнови", "обновить", "переименуй"]) {
+            return .modifyTask
+        }
+        if s.containsAny(["edit", "modify", "change", "update", "fix"]) { return .modifyTask }
+        // Delete
+        if s.containsAny(["удали", "удалить", "сотри", "убери"]) { return .deleteTask }
+        if s.containsAny(["delete", "remove", "cancel"]) { return .deleteTask }
+        // Schedule (includes meeting/event and planning verbs)
+        if s.containsAny(["запланируй", "подбери", "найди", "распиши", "назначь"]) || s.contains("встреч") || s.contains("в календар") {
+            return .scheduleTask
+        }
+        if s.containsAny(["schedule", "when should", "what time", "plan", "meeting", "calendar"]) {
+            return .scheduleTask
+        }
+        // Suggestions
+        if s.containsAny(["предложи", "подскажи", "порекомендуй"]) { return .requestSuggestion }
+        if s.containsAny(["suggest", "recommend", "help me", "what should"]) { return .requestSuggestion }
+        // Questions
+        if s.containsAny(["?", "как", "что", "почему", "когда", "где", "сколько", "how", "what", "why", "when", "where"]) {
+            return .askQuestion
+        }
+        return .unknown
+    }
+
+    func parseEvent(_ description: String) async throws -> EventDraft {
+        let base = Date()
+        let (start, end, allDay) = parseTime(from: description, base: base)
+        let title = cleanEventTitle(from: description)
+        return EventDraft(title: title, start: start, end: end, isAllDay: allDay)
     }
     
     // MARK: - Helper Methods
@@ -447,6 +475,36 @@ final class EnhancedLLMProvider: LLMProviderProtocol {
         }
         
         return date
+    }
+
+    // MARK: - Title sanitation for events
+    private func cleanEventTitle(from raw: String) -> String {
+        var s = raw
+        let lowers = s.lowercased()
+        // Strip scheduling verbs/boilerplate
+        let verbs = [
+            "создай","создать","добавь","добавить","запланируй","запланировать","назначь","назначить",
+            "организуй","организовать","в календарь","добавь в календарь",
+            "make","create","add","schedule","plan","put to calendar"
+        ]
+        for v in verbs { s = s.replacingOccurrences(of: v, with: " ", options: .caseInsensitive) }
+        // Entity words
+        let entities = ["встречу","встреча","митинг","meeting","событие","event"]
+        for w in entities { s = s.replacingOccurrences(of: w, with: " ", options: .caseInsensitive) }
+        // Day/time words
+        let dayWords = ["сегодня","завтра","послезавтра","today","tomorrow","day after"]
+        for w in dayWords { s = s.replacingOccurrences(of: w, with: " ", options: .caseInsensitive) }
+        ["утра","вечера","дня","ночи","am","pm"].forEach { s = s.replacingOccurrences(of: $0, with: " ", options: .caseInsensitive) }
+        // HH[:MM] and ranges
+        s = s.replacingOccurrences(of: #"\bв\s*([01]?\d|2[0-3])([:\\.][0-5]\d)?\b"#, with: " ", options: .regularExpression)
+        s = s.replacingOccurrences(of: #"с\s*([01]?\d|2[0-3])([:\\.][0-5]\d)?\s*до\s*([01]?\d|2[0-3])([:\\.][0-5]\d)?"#, with: " ", options: .regularExpression)
+
+        // Collapse spaces
+        let cleaned = s.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if cleaned.isEmpty || cleaned.count < 3 { return entities.contains(where: { lowers.contains($0) }) ? "Встреча" : "Событие" }
+        return cleaned.prefix(1).uppercased() + cleaned.dropFirst()
     }
     
     private func calculateScheduleConfidence(task: TaskSummary, scheduledTime: Date, isPeakHour: Bool) -> Double {
@@ -540,32 +598,133 @@ struct OnDeviceLLMStub: LLMProviderProtocol {
         return try await EnhancedLLMProvider.shared.detectIntent(input)
     }
     
+    func parseEvent(_ description: String) async throws -> EventDraft {
+        return try await EnhancedLLMProvider.shared.parseEvent(description)
+    }
+    
     // Legacy method for backward compatibility
     func complete(prompt: String) async throws -> String {
         return try await generateResponse(prompt)
     }
 }
 
-// MARK: - String Extension for Pattern Matching
-extension String {
-    func matches(patterns: [String]) -> Bool {
-        return patterns.contains { self.contains($0) }
-    }
+// MARK: - Helpers
+private extension String {
+    func containsAny(_ subs: [String]) -> Bool { subs.contains { self.contains($0) } }
 }
 
-// MARK: - Analytics Extensions
+// Parse a simple time expression from text, return start/end and all-day flag
+private func parseTime(from text: String, base: Date) -> (Date, Date, Bool) {
+    let lower = text.lowercased()
+    let cal = Calendar.current
+    var day = cal.startOfDay(for: base)
+    if lower.contains("завтра") || lower.contains("tomorrow") {
+        day = cal.date(byAdding: .day, value: 1, to: day) ?? day
+    } else if lower.contains("послезавтра") || lower.contains("day after") {
+        day = cal.date(byAdding: .day, value: 2, to: day) ?? day
+    }
+
+    // Try explicit range first
+    if let (s, e) = parseTimeRange(from: lower, base: base) { return (s, e, false) }
+    if let (s, e) = parseTimeRangeWords(from: lower, base: base) { return (s, e, false) }
+
+    // Single time HH[:MM]
+    guard let re = try? NSRegularExpression(pattern: "(^|\\s)([01]?\\d|2[0-3])[:\\.]?([0-5]\\d)?", options: []) else {
+        let start = cal.date(byAdding: DateComponents(hour: 10, minute: 0), to: day) ?? base
+        return (start, start.addingTimeInterval(3600), false)
+    }
+    var hour = 10, minute = 0
+    if let m = re.firstMatch(in: lower, range: NSRange(lower.startIndex..., in: lower)), m.numberOfRanges >= 4,
+       let hr = Range(m.range(at: 2), in: lower) {
+        hour = Int(lower[hr]) ?? 10
+        if let mnR = Range(m.range(at: 3), in: lower) { minute = Int(lower[mnR]) ?? 0 }
+    }
+    // Single word time like "в три" or "в час"
+    if let wh = parseSingleWordHour(from: lower) { hour = wh }
+    let pm = lower.contains("дня") || lower.contains("вечера") || lower.contains("pm")
+    if pm && hour < 12 { hour += 12 }
+    let start = cal.date(byAdding: DateComponents(hour: hour, minute: minute), to: day) ?? base
+    let end = start.addingTimeInterval(3600)
+    let allDay = lower.contains("весь день") || lower.contains("all day")
+    return (start, end, allDay)
+}
+
+// Parse explicit range "с HH[:MM] до HH[:MM]" with optional RU PM markers
+private func parseTimeRange(from text: String, base: Date) -> (Date, Date)? {
+    let lower = text.lowercased()
+    let cal = Calendar.current
+    var day = cal.startOfDay(for: base)
+    if lower.contains("завтра") || lower.contains("tomorrow") {
+        day = cal.date(byAdding: .day, value: 1, to: day) ?? day
+    } else if lower.contains("послезавтра") || lower.contains("day after") {
+        day = cal.date(byAdding: .day, value: 2, to: day) ?? day
+    }
+    guard let re = try? NSRegularExpression(pattern: "с\\s*([01]?\\d|2[0-3])(?::([0-5]\\d))?\\s*до\\s*([01]?\\d|2[0-3])(?::([0-5]\\d))?", options: [.caseInsensitive]) else { return nil }
+    guard let m = re.firstMatch(in: lower, range: NSRange(lower.startIndex..., in: lower)) else { return nil }
+    func num(_ i: Int) -> Int? { if let r = Range(m.range(at: i), in: lower) { return Int(lower[r]) } else { return nil } }
+    var sh = num(1) ?? 9
+    let sm = num(2) ?? 0
+    var eh = num(3) ?? (sh + 1)
+    let em = num(4) ?? 0
+    let pm = lower.contains("дня") || lower.contains("вечера") || lower.contains("pm")
+    if pm { if sh < 12 { sh += 12 }; if eh < 12 { eh += 12 } }
+    let start = cal.date(byAdding: DateComponents(hour: sh, minute: sm), to: day) ?? base
+    let end = cal.date(byAdding: DateComponents(hour: eh, minute: em), to: day) ?? start.addingTimeInterval(3600)
+    return (start, end)
+}
+
+// Parse explicit range with Russian words: "с часа до трёх (дня|вечера|утра)"
+private func parseTimeRangeWords(from text: String, base: Date) -> (Date, Date)? {
+    let lower = text
+    let cal = Calendar.current
+    var day = cal.startOfDay(for: base)
+    if lower.contains("завтра") || lower.contains("tomorrow") { day = cal.date(byAdding: .day, value: 1, to: day) ?? day }
+    if lower.contains("послезавтра") || lower.contains("day after") { day = cal.date(byAdding: .day, value: 2, to: day) ?? day }
+    guard let sRange = lower.range(of: "с "), let dRange = lower.range(of: " до ") else { return nil }
+    let startWord = lower[sRange.upperBound..<dRange.lowerBound].trimmingCharacters(in: .whitespaces)
+    var afterDo = lower[dRange.upperBound...]
+    // trim meridiem words at tail
+    let meridiemPM = afterDo.contains("вечера") || afterDo.contains("дня") || afterDo.contains("pm")
+    // Take first word after "до"
+    let endWord = afterDo.split(whereSeparator: { $0.isWhitespace }).first.map(String.init) ?? ""
+    guard let sh = ruHour(fromWord: startWord), let eh = ruHour(fromWord: endWord) else { return nil }
+    var startH = sh, endH = eh
+    if meridiemPM { if startH < 12 { startH += 12 }; if endH < 12 { endH += 12 } }
+    let start = cal.date(byAdding: DateComponents(hour: startH, minute: 0), to: day) ?? base
+    let end = cal.date(byAdding: DateComponents(hour: endH, minute: 0), to: day) ?? start.addingTimeInterval(3600)
+    return (start, end)
+}
+
+// Parse single word hour like "в три", returns 0-23 or nil
+private func parseSingleWordHour(from text: String) -> Int? {
+    guard let r = text.range(of: "в ") else { return nil }
+    let tail = text[r.upperBound...]
+    let word = tail.split(whereSeparator: { !$0.isLetter }).first.map(String.init) ?? ""
+    return ruHour(fromWord: word)
+}
+
+// Map Russian word forms to hour (1-12)
+private func ruHour(fromWord raw: String) -> Int? {
+    let w = raw.replacingOccurrences(of: "ё", with: "е")
+    let map: [Int: [String]] = [
+        1: ["час", "часа", "один", "одного"],
+        2: ["два", "двух"],
+        3: ["три", "трех", "трёх"],
+        4: ["четыре", "четырех", "четырех"],
+        5: ["пять", "пяти"],
+        6: ["шесть", "шести"],
+        7: ["семь", "семи"],
+        8: ["восемь", "восьми"],
+        9: ["девять", "девяти"],
+        10: ["десять", "десяти"],
+        11: ["одиннадцать", "одиннадцати"],
+        12: ["двенадцать", "двенадцати"]
+    ]
+    for (h, arr) in map { if arr.contains(where: { w.contains($0) }) { return h } }
+    return nil
+}
+
+// Analytics (used in suggestions)
 extension AnalyticsEvent {
     static let aiSuggestionGenerated = AnalyticsEvent(rawValue: "ai_suggestion_generated")!
-}
-
-// MARK: - Legacy AIIntent Support
-struct AIIntent: Codable {
-    let action: String
-    let payload: [String: String]?
-    let meta: Meta
-    
-    struct Meta: Codable {
-        let confidence: Double
-        let requiresConfirmation: Bool
-    }
 }

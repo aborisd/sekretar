@@ -9,15 +9,11 @@ struct TaskEditorView: View {
     @State private var dueDate: Date?
     @State private var hasDue: Bool
     @State private var priority: Int
-    @State private var selectedProject: ProjectEntity?
     @State private var showingDeleteAlert = false
     @State private var isNewTask: Bool
     @State private var isSaving = false
     
-    @FetchRequest(
-        entity: ProjectEntity.entity(),
-        sortDescriptors: [NSSortDescriptor(key: "title", ascending: true)]
-    ) private var projects: FetchedResults<ProjectEntity>
+    // Projects UI disabled for now
     
     let task: TaskEntity
 
@@ -28,7 +24,7 @@ struct TaskEditorView: View {
         _dueDate = State(initialValue: task.dueDate)
         _hasDue = State(initialValue: task.dueDate != nil)
         _priority = State(initialValue: Int(task.priority))
-        _selectedProject = State(initialValue: task.project)
+        // selectedProject removed
         _isNewTask = State(initialValue: task.title?.isEmpty ?? true)
     }
 
@@ -54,8 +50,7 @@ struct TaskEditorView: View {
                         // Priority Section
                         prioritySection
                         
-                        // Project Section
-                        projectSection
+                        // Project section hidden
                         
                         // Action Buttons
                         actionsSection
@@ -238,43 +233,7 @@ struct TaskEditorView: View {
         }
     }
     
-    // MARK: - Project Section
-    private var projectSection: some View {
-        VStack(alignment: .leading, spacing: DesignSystem.Spacing.md) {
-            Label("Проект", systemImage: "folder.fill")
-                .font(DesignSystem.Typography.cardTitle)
-                .foregroundColor(DesignSystem.Colors.textPrimary)
-            
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: DesignSystem.Spacing.sm) {
-                    // None option
-                    ProjectSelectionButton(
-                        title: "Нет проекта",
-                        color: Color.gray,
-                        isSelected: selectedProject == nil
-                    ) {
-                        withAnimation(DesignSystem.Animation.bouncy) {
-                            selectedProject = nil
-                        }
-                    }
-                    
-                    // Available projects
-                    ForEach(projects, id: \.id) { project in
-                        ProjectSelectionButton(
-                            title: project.title ?? "Project",
-                            color: Color(hex: project.color ?? "#3B82F6"),
-                            isSelected: selectedProject?.id == project.id
-                        ) {
-                            withAnimation(DesignSystem.Animation.bouncy) {
-                                selectedProject = project
-                            }
-                        }
-                    }
-                }
-                .padding(.horizontal, DesignSystem.Spacing.xs)
-            }
-        }
-    }
+    // Project section removed
     
     // MARK: - Actions Section
     private var actionsSection: some View {
@@ -344,7 +303,7 @@ struct TaskEditorView: View {
         task.notes = notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : notes.trimmingCharacters(in: .whitespacesAndNewlines)
         task.priority = Int16(priority)
         task.dueDate = hasDue ? dueDate : nil
-        task.project = selectedProject
+        // task.project disabled
         task.updatedAt = Date()
         
         do {
@@ -451,41 +410,7 @@ struct PriorityButton: View {
     }
 }
 
-// MARK: - Project Selection Button
-struct ProjectSelectionButton: View {
-    let title: String
-    let color: Color
-    let isSelected: Bool
-    let action: () -> Void
-    
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: DesignSystem.Spacing.xs) {
-                Circle()
-                    .fill(color)
-                    .frame(width: 12, height: 12)
-                
-                Text(title)
-                    .font(DesignSystem.Typography.caption)
-                    .foregroundColor(isSelected ? .white : DesignSystem.Colors.textPrimary)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(isSelected ? color : DesignSystem.Colors.cardBackground)
-                    .shadow(
-                        color: isSelected ? color.opacity(0.3) : DesignSystem.Shadow.small.color,
-                        radius: isSelected ? 4 : DesignSystem.Shadow.small.radius,
-                        x: DesignSystem.Shadow.small.x,
-                        y: DesignSystem.Shadow.small.y
-                    )
-            )
-        }
-        .scaleEffect(isSelected ? 1.05 : 1.0)
-        .animation(DesignSystem.Animation.bouncy, value: isSelected)
-    }
-}
+// ProjectSelectionButton removed
 
 // MARK: - Color Extension
 extension Color {

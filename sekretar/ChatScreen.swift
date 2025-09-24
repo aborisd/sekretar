@@ -9,6 +9,7 @@ struct Message: Identifiable, Hashable {
 }
 
 // MARK: - ViewModel
+@MainActor
 final class ChatViewModel: ObservableObject {
     @Published var messages: [Message] = [
         Message(text: "Привет! Я помогу спланировать день.", isUser: false)
@@ -16,9 +17,8 @@ final class ChatViewModel: ObservableObject {
     @Published var input: String = ""
     @Published var typing: Bool = false
 
-    // Resolve provider dynamically so config changes (RemoteLLM.plist / Info.plist) take effect without relaunch
-    private var llm: LLMProviderProtocol { AIProviderFactory.current() }
-    private var currentTask: Task<Void, Never>? = nil
+    private let ai = AIIntentService.shared
+    var currentTask: Task<Void, Never>? = nil
 
     func send() {
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -27,29 +27,12 @@ final class ChatViewModel: ObservableObject {
         messages.append(.init(text: trimmed, isUser: true))
         input = ""
         typing = true
-
         currentTask?.cancel()
-        currentTask = Task { [weak self] in
+        currentTask = Task { @MainActor [weak self] in
             guard let self else { return }
-            do {
-                let reply = try await llm.generateResponse(trimmed)
-                await MainActor.run {
-                    self.messages.append(.init(text: reply, isUser: false))
-                    self.typing = false
-                    self.currentTask = nil
-                }
-            } catch is CancellationError {
-                await MainActor.run {
-                    self.typing = false
-                    self.currentTask = nil
-                }
-            } catch {
-                await MainActor.run {
-                    self.messages.append(.init(text: "⚠️ Ошибка генерации ответа: \(error.localizedDescription)", isUser: false))
-                    self.typing = false
-                    self.currentTask = nil
-                }
-            }
+            await ai.processUserInput(trimmed)
+            self.typing = false
+            self.currentTask = nil
         }
     }
 
@@ -85,6 +68,11 @@ private struct Bubble: View {
 // MARK: - ChatScreen (полный файл)
 struct ChatScreen: View {
     @StateObject private var vm = ChatViewModel()
+    @ObservedObject private var ai = AIIntentService.shared
+    @State private var showUndoBanner = false
+
+    @StateObject private var voice = VoiceInputService()
+    @State private var autoVoiceStarted = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -112,10 +100,33 @@ struct ChatScreen: View {
                             .padding(.horizontal, 12)
                         }
 
+                        // Встроенная карточка предпросмотра действия
+                        if let action = ai.pendingAction {
+                            AIActionInlineCard(
+                                action: action,
+                                onConfirm: {
+                                    vm.currentTask?.cancel()
+                                    vm.currentTask = Task { @MainActor in
+                                        await ai.confirmPendingAction()
+                                        await MainActor.run {
+                                            self.vm.messages.append(.init(text: "✅ Изменения применены", isUser: false))
+                                        }
+                                        showUndoBanner = true
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 8) {
+                                            withAnimation { showUndoBanner = false }
+                                        }
+                                    }
+                                },
+                                onCancel: { ai.cancelPendingAction() }
+                            )
+                            .padding(.horizontal, 12)
+                        }
+
                         // Якорь для автоскролла
                         Color.clear.frame(height: 1).id("bottom")
                     }
                     .padding(.top, 8)
+                    .task { await MaintenanceService.purgeEmptyDraftTasks(in: PersistenceController.shared.container.viewContext) }
                     .onChange(of: vm.messages.count) { _ in
                         withAnimation(.easeOut(duration: 0.2)) {
                             proxy.scrollTo("bottom", anchor: .bottom)
@@ -143,14 +154,51 @@ struct ChatScreen: View {
                     )
                     .lineLimit(1...5)
 
-                if vm.typing {
+                if vm.typing || ai.isProcessing {
                     Button(action: vm.stop) {
                         Image(systemName: "stop.circle.fill")
                             .font(.system(size: 16, weight: .semibold))
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(.red)
+                } else {
+                    Button(action: { 
+                        vm.currentTask?.cancel()
+                        vm.currentTask = Task { @MainActor in
+                        if voice.isRecording {
+                            await voice.stop()
+                            let text = voice.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+                            if !text.isEmpty {
+                                await ai.processUserInput(text)
+                            }
+                            voice.reset()
+                            vm.input = ""
+                        } else {
+                            voice.reset()
+                            vm.input = ""
+                            await voice.start()
+                        }
+                    } }) {
+                        Image(systemName: voice.isRecording ? "mic.circle.fill" : "mic.circle")
+                            .font(.system(size: 16, weight: .semibold))
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(ai.isProcessing)
                 }
+
+                // Кнопка структурного разбора/интента (предпросмотр действий)
+                Button {
+                    let text = vm.input.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !text.isEmpty else { return }
+                    vm.currentTask?.cancel()
+                    vm.currentTask = Task { @MainActor in await ai.processUserInput(text) }
+                    // Сбрасываем поле ввода сразу после запуска анализа
+                    vm.input = ""
+                } label: {
+                    Image(systemName: "wand.and.stars")
+                        .font(.system(size: 16, weight: .semibold))
+                }
+                .buttonStyle(.bordered)
 
                 Button(action: vm.send) {
                     Image(systemName: "paperplane.fill")
@@ -158,13 +206,83 @@ struct ChatScreen: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.blue)
-                .disabled(vm.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(vm.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || ai.isProcessing)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .background(Color(white: 0.96))
         }
         .navigationTitle("Чат")
+        // Раньше предпросмотр открывался как модалка; теперь он инлайн
+        // Баннер Undo после применения расписания
+        .overlay(alignment: .bottom) {
+            if showUndoBanner {
+                HStack(spacing: 12) {
+                    Image(systemName: "arrow.uturn.backward")
+                    Text("Изменения применены")
+                        .font(.subheadline)
+                    Spacer()
+                    Button("Отменить") {
+                        Task { await ai.undoLastAppliedSchedule() }
+                        withAnimation { showUndoBanner = false }
+                    }
+                }
+                .padding(12)
+                .background(.ultraThinMaterial)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .shadow(radius: 4)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 16)
+            }
+        }
+        .task {
+            // Автостарт голосового ввода по умолчанию один раз при открытии чата
+            if !autoVoiceStarted {
+                autoVoiceStarted = true
+                if !voice.isRecording { await voice.start() }
+            }
+        }
+        // Обновляем поле ввода во время диктовки, и отправляем по завершении
+        .onChange(of: voice.transcript) { newValue in
+            if voice.isRecording {
+                vm.input = newValue
+            }
+        }
+        .onChange(of: voice.isRecording) { isRec in
+            guard !isRec else { return }
+            let text = voice.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { return }
+            // Показать реплику пользователя
+            vm.messages.append(.init(text: text, isUser: true))
+            vm.input = ""
+            vm.typing = true
+            vm.currentTask?.cancel()
+            vm.currentTask = Task { @MainActor in
+                await ai.processUserInput(text)
+                vm.typing = false
+                voice.reset()
+            }
+        }
+        .onChange(of: ai.pendingAction?.id) { _ in
+            // Если появилась карточка предпросмотра — останавливаем запись, чтобы не было гонок состояний
+            if ai.pendingAction != nil && voice.isRecording {
+                Task { await voice.stop() }
+            }
+        }
+        .onChange(of: ai.lastOpenLink?.id) { _ in
+            guard let link = ai.lastOpenLink else { return }
+            switch link.tab {
+            case .calendar:
+                NotificationCenter.default.post(name: .openCalendarOn, object: nil, userInfo: ["date": link.date as Any])
+            case .tasks:
+                NotificationCenter.default.post(name: .openTasksOn, object: nil)
+            }
+        }
+        .onChange(of: ai.lastResultToast) { toast in
+            if let toast, !toast.isEmpty {
+                vm.messages.append(.init(text: toast, isUser: false))
+            }
+        }
     }
 }
 

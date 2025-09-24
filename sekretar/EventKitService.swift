@@ -7,6 +7,7 @@ protocol EventKitServiceProtocol {
     func events(for date: Date) async -> [EKEvent]
     func importEvents(from startDate: Date, to endDate: Date) async throws
     func syncToEventKit(_ event: EventEntity) async throws
+    func deleteFromEventKit(eventKitId: String) async throws
 }
 
 @MainActor
@@ -108,6 +109,14 @@ final class EventKitService: ObservableObject, EventKitServiceProtocol {
             try? self.context.save()
         }
     }
+
+    func deleteFromEventKit(eventKitId: String) async throws {
+        let hasAccess = await requestAccess()
+        guard hasAccess else { throw EventKitError.accessDenied }
+        if let existing = store.event(withIdentifier: eventKitId) {
+            try store.remove(existing, span: .thisEvent)
+        }
+    }
 }
 
 enum EventKitError: Error {
@@ -115,4 +124,3 @@ enum EventKitError: Error {
     case saveFailed
     case eventNotFound
 }
-

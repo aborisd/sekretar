@@ -1,7 +1,8 @@
 import SwiftUI
 
+// Legacy view kept for compatibility; now previews AIAction
 struct IntentPreview: View {
-    let intent: AIIntent
+    let action: AIAction
     var onConfirm: () -> Void
     @Environment(\.dismiss) private var dismiss
 
@@ -9,10 +10,13 @@ struct IntentPreview: View {
         NavigationStack {
             VStack(spacing: 12) {
                 Group {
-                    HStack { Text("Действие"); Spacer(); Text(intent.action).fontWeight(.semibold) }
-                    if let p = intent.payload, !p.isEmpty {
+                    HStack {
+                        Text("Действие"); Spacer()
+                        Text(action.type.displayName).fontWeight(.semibold)
+                    }
+                    if !action.payload.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
-                            ForEach(p.sorted(by: { $0.key < $1.key }), id: \.key) { k, v in
+                            ForEach(sortedPayload(), id: \.0) { k, v in
                                 HStack { Text(k); Spacer(); Text(v).foregroundStyle(.secondary) }
                             }
                         }
@@ -21,8 +25,7 @@ struct IntentPreview: View {
                     }
                     HStack {
                         Text("Уверенность"); Spacer()
-                        Text(String(format: "%.0f%%", intent.meta.confidence * 100))
-                            .foregroundStyle(.secondary)
+                        Text(String(format: "%.0f%%", action.confidence * 100)).foregroundStyle(.secondary)
                     }
                 }
                 .padding(.vertical, 2)
@@ -30,8 +33,7 @@ struct IntentPreview: View {
                 Spacer()
 
                 Button {
-                    onConfirm()
-                    dismiss()
+                    onConfirm(); dismiss()
                 } label: {
                     Label("Подтвердить", systemImage: "checkmark.circle.fill")
                 }
@@ -44,5 +46,11 @@ struct IntentPreview: View {
             .navigationTitle("Предпросмотр")
             .presentationDetents([.medium, .large])
         }
+    }
+
+    private func sortedPayload() -> [(String, String)] {
+        action.payload
+            .map { key, value in (key, String(describing: value)) }
+            .sorted { $0.0 < $1.0 }
     }
 }

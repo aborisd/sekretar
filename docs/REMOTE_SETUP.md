@@ -20,20 +20,27 @@ Option B — llama.cpp (CPU)
 2) Run: `docker compose -f server/docker-compose.cpu.yml up -d` (set `GGUF_MODEL=<file>` env var).
 3) API endpoint: `http://localhost:8000/v1/chat/completions`.
 
-iOS app wiring
---------------
-1) Add the following keys to the app target Info.plist (or via UserDefaults for quick tests):
-   - `REMOTE_LLM_BASE_URL` — e.g., `http://<host>:8000`
-   - `REMOTE_LLM_MODEL` — e.g., `mistralai/Mistral-7B-Instruct-v0.2`
-   - `REMOTE_LLM_API_KEY` — optional, omit for open vLLM server
-2) Switch provider:
-   - Set `UserDefaults.standard.set("remote", forKey: "ai_provider")` once (or add a small settings toggle later).
-3) Build and run. The app will call `/v1/chat/completions` with a concise system prompt.
+ iOS app wiring
+ --------------
+ Debug (local overrides via plist)
+ - Copy `sekretar/RemoteLLM.plist.sample` → `sekretar/RemoteLLM.plist` and fill in real values.
+ - This file is ignored by git and read only in Debug builds.
+ - Alternatively, create `RemoteLLM.local.plist` with the same keys. In Debug the app looks for `RemoteLLM.local.plist` then `RemoteLLM.plist`.
 
-Notes
-- Cancellation: the app cancels the in-flight request; UI doesn’t show an error on user cancel.
-- Streaming: current remote provider uses non-streamed responses; we can add SSE streaming later.
-- Security: front vLLM with a reverse proxy (TLS, API key) before exposing to the internet.
+ Release/CI (no secrets in bundle)
+ - Provide non-sensitive defaults in `Info.plist` or set values via `UserDefaults` at runtime.
+ - API keys should not be embedded in the app bundle; prefer Keychain (UI to enter the key) or server-side proxy.
+
+ Minimal wiring
+ 1) Configure via one of the sources (priority order):
+    - UserDefaults (`REMOTE_LLM_*`), then Debug-only local plist, then `Info.plist`.
+ 2) Build and run. The app uses `RemoteLLMProvider` automatically when `REMOTE_LLM_BASE_URL` is present.
+
+ Notes
+ - Cancellation: the app cancels the in-flight request; UI doesn’t show an error on user cancel.
+ - Streaming: SSE streaming is implemented in `RemoteLLMProvider` with cooperative cancel.
+ - Security: front vLLM with a reverse proxy (TLS, API key) before exposing to the internet.
+ - Secrets hygiene: `RemoteLLM.plist`/`RemoteLLM.local.plist` are for Debug only; they are ignored by git and not read by Release builds.
 
 TLS + API key (production-ready sketch)
 --------------------------------------

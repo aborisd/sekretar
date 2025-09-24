@@ -1,5 +1,7 @@
 import SwiftUI
+#if canImport(UIKit)
 import UIKit
+#endif
 
 // MARK: - Design System
 struct DesignSystem {
@@ -109,10 +111,10 @@ struct DesignSystem {
     
     // MARK: - Animation
     struct Animation {
-        static let quick = SwiftUI.Animation.easeInOut(duration: 0.2)
-        static let standard = SwiftUI.Animation.easeInOut(duration: 0.3)
-        static let slow = SwiftUI.Animation.easeInOut(duration: 0.5)
-        static let bouncy = SwiftUI.Animation.spring(response: 0.6, dampingFraction: 0.8)
+        static let quick = SwiftUI.Animation.easeInOut(duration: 0.15)
+        static let standard = SwiftUI.Animation.easeInOut(duration: 0.22)
+        static let slow = SwiftUI.Animation.easeInOut(duration: 0.4)
+        static let bouncy = SwiftUI.Animation.spring(response: 0.45, dampingFraction: 0.85)
     }
 }
 
