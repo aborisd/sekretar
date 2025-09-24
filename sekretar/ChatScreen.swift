@@ -100,9 +100,12 @@ struct ChatScreen: View {
                         }
 
                         // Встроенная карточка предпросмотра действия
-                        if let action = ai.pendingAction {
+                        if let pending = ai.pendingAction {
                             AIActionInlineCard(
-                                action: action,
+                                action: Binding(
+                                    get: { ai.pendingAction ?? pending },
+                                    set: { ai.pendingAction = $0 }
+                                ),
                                 onConfirm: {
                                     vm.currentTask?.cancel()
                                     vm.currentTask = Task { @MainActor in

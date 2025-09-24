@@ -78,3 +78,16 @@
 "ai.toast.event_created" = "✅ Event created: %@";
 "ai.toast.slots" = "✅ Suggested time slots";
 "ai.toast.default" = "✅ Action completed";
+
+/* AI Inline Editor */
+"ai.inline.title" = "Title";
+"ai.inline.title_placeholder" = "Short summary";
+"ai.inline.notes" = "Notes";
+"ai.inline.notes_placeholder" = "Additional context for this action";
+"ai.inline.priority" = "Priority";
+"ai.inline.start" = "Start";
+"ai.inline.end" = "End";
+"ai.inline.add_start" = "Add start time";
+"ai.inline.add_end" = "Add end time";
+"ai.inline.all_day" = "All day";
+"ai.inline.remove_schedule" = "Remove schedule";

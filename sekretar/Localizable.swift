@@ -106,6 +106,20 @@ struct L10n {
         static let slots = L10n.string("ai.toast.slots")
         static let `default` = L10n.string("ai.toast.default")
     }
+
+    struct AIInline {
+        static let title = L10n.string("ai.inline.title")
+        static let titlePlaceholder = L10n.string("ai.inline.title_placeholder")
+        static let notes = L10n.string("ai.inline.notes")
+        static let notesPlaceholder = L10n.string("ai.inline.notes_placeholder")
+        static let priority = L10n.string("ai.inline.priority")
+        static let start = L10n.string("ai.inline.start")
+        static let end = L10n.string("ai.inline.end")
+        static let addStart = L10n.string("ai.inline.add_start")
+        static let addEnd = L10n.string("ai.inline.add_end")
+        static let allDay = L10n.string("ai.inline.all_day")
+        static let removeSchedule = L10n.string("ai.inline.remove_schedule")
+    }
 }
 
 // MARK: - String Extension for Localization

@@ -78,3 +78,16 @@
 "ai.toast.event_created" = "✅ Событие создано: %@";
 "ai.toast.slots" = "✅ Предложены временные слоты";
 "ai.toast.default" = "✅ Действие выполнено";
+
+/* AI Inline Editor */
+"ai.inline.title" = "Заголовок";
+"ai.inline.title_placeholder" = "Краткое описание";
+"ai.inline.notes" = "Заметки";
+"ai.inline.notes_placeholder" = "Контекст для действия";
+"ai.inline.priority" = "Приоритет";
+"ai.inline.start" = "Начало";
+"ai.inline.end" = "Окончание";
+"ai.inline.add_start" = "Добавить время начала";
+"ai.inline.add_end" = "Добавить время окончания";
+"ai.inline.all_day" = "Весь день";
+"ai.inline.remove_schedule" = "Убрать расписание";

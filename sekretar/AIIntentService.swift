@@ -15,6 +15,7 @@ final class AIIntentService: ObservableObject {
     
     private let llmProvider: LLMProviderProtocol
     private let context: NSManagedObjectContext
+    private let naturalLanguageParser = NaturalLanguageDateParser()
     private var lastAppliedEventIDs: [UUID] = []
     
     init(context: NSManagedObjectContext = PersistenceController.shared.container.viewContext,
@@ -221,29 +222,39 @@ final class AIIntentService: ObservableObject {
     private func generateCreateTaskAction(input: String) async throws -> AIAction {
         let analysis = try await llmProvider.analyzeTask(input)
         // Try to extract schedule from phrase (via parseEvent to reuse NL parsing)
-        var startDate: Date? = nil
-        var endDate: Date? = nil
-        do {
-            let draft = try await llmProvider.parseEvent(input)
-            // Consider it a schedule only if duration >= 15m
-            if draft.end.timeIntervalSince(draft.start) >= 15 * 60 {
-                startDate = draft.start; endDate = draft.end
+        var schedule = naturalLanguageParser.parse(input)
+        if schedule == nil {
+            if let draft = try? await llmProvider.parseEvent(input) {
+                schedule = DateTimeParsingResult(start: draft.start, end: draft.end, isAllDay: draft.isAllDay)
             }
-        } catch {}
+        }
+
+        var startDate: Date?
+        var endDate: Date?
+        var isAllDay = false
+        if let schedule {
+            let duration = schedule.end.timeIntervalSince(schedule.start)
+            if duration >= 15 * 60 {
+                startDate = schedule.start
+                endDate = schedule.end
+                isAllDay = schedule.isAllDay
+            }
+        }
 
         // Extract task title from input (simple approach)
         let title = extractTaskTitle(from: input)
         
-        let payload: [String: Any] = [
+        var payload: [String: Any] = [
             "title": title,
             "priority": analysis.suggestedPriority,
             "notes": input,
             "category": analysis.category,
             "estimated_duration": analysis.estimatedDuration,
-            "suggested_tags": analysis.suggestedTags,
-            "start": startDate as Any,
-            "end": endDate as Any
+            "suggested_tags": analysis.suggestedTags
         ]
+        if let startDate { payload["start"] = startDate }
+        if let endDate { payload["end"] = endDate }
+        if isAllDay { payload["is_all_day"] = true }
         
         return AIAction(
             type: .createTask,
@@ -304,10 +315,19 @@ final class AIIntentService: ObservableObject {
     }
 
     private func generateCreateEventAction(input: String) async throws -> AIAction {
-        var draft = try await llmProvider.parseEvent(input)
+        var draft: EventDraft
+        if let schedule = naturalLanguageParser.parse(input) {
+            var titleCandidate = extractTaskTitle(from: input)
+            if titleCandidate.isEmpty {
+                titleCandidate = localized("Событие", en: "Event")
+            }
+            draft = EventDraft(title: titleCandidate, start: schedule.start, end: schedule.end, isAllDay: schedule.isAllDay)
+        } else {
+            draft = try await llmProvider.parseEvent(input)
+        }
         draft = await normalizeEventDraft(draft, originalInput: input)
 
-        let title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Событие" : draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? localized("Событие", en: "Event") : draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
         var payload: [String: Any] = [
             "title": title,
             "start": draft.start,
@@ -450,7 +470,7 @@ final class AIIntentService: ObservableObject {
                 ev.title = title
                 ev.startDate = start
                 ev.endDate = end
-                ev.isAllDay = false
+                ev.isAllDay = action.payload["is_all_day"] as? Bool ?? false
                 ev.notes = "Создано при добавлении задачи"
                 try? self.context.save()
             }
@@ -669,19 +689,22 @@ final class AIIntentService: ObservableObject {
 
     private func normalizeEventDraft(_ draft: EventDraft, originalInput: String) async -> EventDraft {
         var adjusted = draft
-        let now = Date()
         let reference = Date(timeIntervalSince1970: 946684800) // 1 Jan 2000
 
-        if adjusted.start < reference || adjusted.start.timeIntervalSince1970 <= 0 {
+        if let parsed = naturalLanguageParser.parse(originalInput) {
+            adjusted = EventDraft(title: adjusted.title, start: parsed.start, end: parsed.end, isAllDay: parsed.isAllDay)
+        } else if adjusted.start < reference || adjusted.start.timeIntervalSince1970 <= 0 {
             if let fallback = try? await EnhancedLLMProvider.shared.parseEvent(originalInput) {
                 adjusted = fallback
-            } else if let heuristic = heuristicEvent(from: originalInput, base: now) {
-                adjusted = heuristic
             }
         }
 
-        // Гарантируем длительность хотя бы 30 минут
-        if adjusted.end <= adjusted.start {
+        let calendar = Calendar.current
+        if adjusted.isAllDay {
+            let startDay = calendar.startOfDay(for: adjusted.start)
+            let endDay = calendar.date(byAdding: .day, value: 1, to: startDay) ?? startDay.addingTimeInterval(86400)
+            adjusted = EventDraft(title: adjusted.title, start: startDay, end: endDay, isAllDay: true)
+        } else if adjusted.end <= adjusted.start {
             let end = adjusted.start.addingTimeInterval(1800)
             adjusted = EventDraft(title: adjusted.title, start: adjusted.start, end: end, isAllDay: adjusted.isAllDay)
         }
@@ -689,62 +712,11 @@ final class AIIntentService: ObservableObject {
         let trimmed = adjusted.title.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty {
             let fallbackTitle = extractTaskTitle(from: originalInput)
-            adjusted = EventDraft(title: fallbackTitle, start: adjusted.start, end: adjusted.end, isAllDay: adjusted.isAllDay)
-        }
-
-        if let heur = heuristicEvent(from: originalInput, base: Date()) {
-            let calendar = Calendar.current
-            if heur.isAllDay {
-                let startDay = calendar.startOfDay(for: heur.start)
-                let endDay = calendar.date(byAdding: .day, value: 1, to: startDay) ?? startDay.addingTimeInterval(86400)
-                adjusted = EventDraft(title: adjusted.title, start: startDay, end: endDay, isAllDay: true)
-            } else {
-                let providerDuration = adjusted.end.timeIntervalSince(adjusted.start)
-                let heurDuration = heur.end.timeIntervalSince(heur.start)
-                let duration = max(max(providerDuration, heurDuration), 1800)
-                let end = heur.start.addingTimeInterval(duration)
-                adjusted = EventDraft(title: adjusted.title, start: heur.start, end: end, isAllDay: false)
-            }
+            let title = fallbackTitle.isEmpty ? localized("Событие", en: "Event") : fallbackTitle
+            adjusted = EventDraft(title: title, start: adjusted.start, end: adjusted.end, isAllDay: adjusted.isAllDay)
         }
 
         return adjusted
-    }
-
-    private func heuristicEvent(from input: String, base: Date) -> EventDraft? {
-        let lower = input.lowercased()
-        let calendar = Calendar.current
-        var day = calendar.startOfDay(for: base)
-        if lower.contains("завтра") || lower.contains("tomorrow") {
-            day = calendar.date(byAdding: .day, value: 1, to: day) ?? day
-        } else if lower.contains("послезавтра") || lower.contains("day after") {
-            day = calendar.date(byAdding: .day, value: 2, to: day) ?? day
-        }
-
-        let timePattern = try? NSRegularExpression(pattern: "(?:(?:в|at)\\s*)?([01]?\\d|2[0-3])[:\\.]?([0-5]\\d)?", options: [.caseInsensitive])
-        let range = NSRange(lower.startIndex..<lower.endIndex, in: lower)
-        guard let match = timePattern?.firstMatch(in: lower, options: [], range: range),
-              let hourRange = Range(match.range(at: 1), in: lower) else {
-            return nil
-        }
-
-        var hour = Int(lower[hourRange]) ?? 0
-        var minute = 0
-        if let minuteRange = Range(match.range(at: 2), in: lower) {
-            minute = Int(lower[minuteRange]) ?? 0
-        }
-
-        if lower.contains("вечера") || lower.contains("pm") || lower.contains("дня") {
-            if hour < 12 { hour += 12 }
-        }
-        if lower.contains("утра") && hour == 12 { hour = 0 }
-
-        guard let start = calendar.date(byAdding: DateComponents(hour: hour, minute: minute), to: day) else {
-            return nil
-        }
-
-        let end = start.addingTimeInterval(3600)
-        let title = extractTaskTitle(from: input)
-        return EventDraft(title: title, start: start, end: end, isAllDay: false)
     }
 
     private var isRussianLocale: Bool {
