@@ -24,6 +24,10 @@ final class AIIntentService: ObservableObject {
         self.llmProvider = llmProvider
     }
     
+    func chatResponse(for input: String) async throws -> String {
+        try await llmProvider.generateResponse(input)
+    }
+    
     // MARK: - Main Processing Method
     func processUserInput(_ input: String) async {
         if Task.isCancelled { return }
@@ -442,7 +446,7 @@ final class AIIntentService: ObservableObject {
         guard let title = action.payload["title"] as? String else {
             throw AIError.missingRequiredField("title")
         }
-        var due: Date? = action.payload["start"] as? Date
+        let due: Date? = action.payload["start"] as? Date
         await context.perform {
             let task = TaskEntity(context: self.context)
             task.id = UUID()
@@ -459,6 +463,8 @@ final class AIIntentService: ObservableObject {
         }
         // Предложим открыть список задач на соответствующую дату
         self.lastOpenLink = OpenLink(tab: .tasks, date: due)
+
+        publishAppliedAction(type: action.type, date: due)
 
         // If schedule is present, create a calendar event, too
         if let start = action.payload["start"] as? Date,
@@ -482,13 +488,49 @@ final class AIIntentService: ObservableObject {
     }
     
     private func executeUpdateTask(_ action: AIAction) async throws {
-        // Implementation for task updates
-        // This would find the task by ID and update its properties
+        guard let task = await resolveTaskEntity(from: action.payload) else {
+            throw AIError.invalidData("Task not found for update")
+        }
+
+        try await context.perform {
+            if let title = (action.payload["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty {
+                task.title = title
+            }
+            if let notesRaw = action.payload["notes"] as? String {
+                let trimmed = notesRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+                task.notes = trimmed.isEmpty ? nil : trimmed
+            }
+            if let priority = self.payloadPriority(action.payload) {
+                task.priority = Int16(priority)
+            }
+            if let due = action.payload["start"] as? Date {
+                task.dueDate = due
+            } else if let end = action.payload["end"] as? Date {
+                task.dueDate = end
+            }
+            task.updatedAt = Date()
+            try self.context.save()
+        }
+
+        emitToast(L10n.AIToast.default)
+        let focusDate = (action.payload["start"] as? Date) ?? (action.payload["end"] as? Date)
+        lastOpenLink = OpenLink(tab: .tasks, date: focusDate)
+        publishAppliedAction(type: action.type, date: focusDate)
     }
     
     private func executeDeleteTask(_ action: AIAction) async throws {
-        // Implementation for task deletion
-        // This would find the task by ID and delete it
+        guard let task = await resolveTaskEntity(from: action.payload) else {
+            throw AIError.invalidData("Task not found for deletion")
+        }
+
+        await context.perform {
+            self.context.delete(task)
+            try? self.context.save()
+        }
+
+        emitToast(L10n.AIToast.default)
+        lastOpenLink = OpenLink(tab: .tasks, date: nil)
+        publishAppliedAction(type: action.type, date: nil)
     }
     
     private func executeCreateEvent(_ action: AIAction) async throws {
@@ -513,14 +555,64 @@ final class AIIntentService: ObservableObject {
         }
         if let created { try? await EventKitService(context: context).syncToEventKit(created) }
         self.lastOpenLink = OpenLink(tab: .calendar, date: start)
+        publishAppliedAction(type: action.type, date: start)
     }
     
     private func executeUpdateEvent(_ action: AIAction) async throws {
-        // Implementation for event updates
+        guard let event = await resolveEventEntity(from: action.payload) else {
+            throw AIError.invalidData("Event not found for update")
+        }
+
+        try await context.perform {
+            if let title = (action.payload["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty {
+                event.title = title
+            }
+            if let notesRaw = action.payload["notes"] as? String {
+                let trimmed = notesRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+                event.notes = trimmed.isEmpty ? nil : trimmed
+            }
+            if let start = action.payload["start"] as? Date {
+                event.startDate = start
+            }
+            if let end = action.payload["end"] as? Date {
+                event.endDate = end
+            }
+            if let isAllDay = action.payload["is_all_day"] as? Bool {
+                event.isAllDay = isAllDay
+            }
+            if event.endDate == nil, let start = event.startDate {
+                event.endDate = start.addingTimeInterval(3600)
+            }
+            try self.context.save()
+        }
+
+        try? await EventKitService(context: context).syncToEventKit(event)
+        emitToast(L10n.AIToast.default)
+        let focusDate = event.startDate
+        lastOpenLink = OpenLink(tab: .calendar, date: focusDate)
+        publishAppliedAction(type: action.type, date: focusDate)
     }
     
     private func executeDeleteEvent(_ action: AIAction) async throws {
-        // Implementation for event deletion
+        guard let event = await resolveEventEntity(from: action.payload) else {
+            throw AIError.invalidData("Event not found for deletion")
+        }
+
+        let startDate = event.startDate
+        let eventKitId = event.eventKitId
+
+        await context.perform {
+            self.context.delete(event)
+            try? self.context.save()
+        }
+
+        if let eventKitId {
+            try? await EventKitService(context: context).deleteFromEventKit(eventKitId: eventKitId)
+        }
+
+        emitToast(L10n.AIToast.default)
+        lastOpenLink = OpenLink(tab: .calendar, date: startDate)
+        publishAppliedAction(type: action.type, date: startDate)
     }
     
     private func executeSuggestTimeSlots(_ action: AIAction) async throws {
@@ -594,6 +686,7 @@ final class AIIntentService: ObservableObject {
             let svc = EventKitService(context: context)
             if let created = try? await fetchEvent(byTitle: title, start: startDate, end: endDate) {
                 try? await svc.syncToEventKit(created)
+                publishAppliedAction(type: .createEvent, date: startDate)
             }
         }
 
@@ -645,6 +738,82 @@ final class AIIntentService: ObservableObject {
             }
             return nil
         }
+    }
+
+    private func resolveTaskEntity(from payload: [String: Any]) async -> TaskEntity? {
+        if let uuid = payloadUUID(payload, key: "task_id"), let match = await fetchTaskEntity(uuid: uuid) {
+            return match
+        }
+        if let title = (payload["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty {
+            return await fetchTaskEntity(title: title)
+        }
+        return nil
+    }
+
+    private func resolveEventEntity(from payload: [String: Any]) async -> EventEntity? {
+        if let uuid = payloadUUID(payload, key: "event_id"), let match = await fetchEventEntity(uuid: uuid) {
+            return match
+        }
+        if let title = (payload["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty {
+            return await fetchEventEntity(title: title)
+        }
+        return nil
+    }
+
+    private func fetchTaskEntity(uuid: UUID) async -> TaskEntity? {
+        await context.perform {
+            let fr: NSFetchRequest<TaskEntity> = TaskEntity.fetchRequest()
+            fr.fetchLimit = 1
+            fr.predicate = NSPredicate(format: "id == %@", uuid as CVarArg)
+            return try? self.context.fetch(fr).first
+        }
+    }
+
+    private func fetchTaskEntity(title: String) async -> TaskEntity? {
+        await context.perform {
+            let fr: NSFetchRequest<TaskEntity> = TaskEntity.fetchRequest()
+            fr.fetchLimit = 1
+            fr.predicate = NSPredicate(format: "title CONTAINS[cd] %@", title)
+            return try? self.context.fetch(fr).first
+        }
+    }
+
+    private func fetchEventEntity(uuid: UUID) async -> EventEntity? {
+        await context.perform {
+            let fr: NSFetchRequest<EventEntity> = EventEntity.fetchRequest()
+            fr.fetchLimit = 1
+            fr.predicate = NSPredicate(format: "id == %@", uuid as CVarArg)
+            return try? self.context.fetch(fr).first
+        }
+    }
+
+    private func fetchEventEntity(title: String) async -> EventEntity? {
+        await context.perform {
+            let fr: NSFetchRequest<EventEntity> = EventEntity.fetchRequest()
+            fr.fetchLimit = 1
+            fr.predicate = NSPredicate(format: "title CONTAINS[cd] %@", title)
+            return try? self.context.fetch(fr).first
+        }
+    }
+
+    private func payloadUUID(_ payload: [String: Any], key: String) -> UUID? {
+        if let uuid = payload[key] as? UUID { return uuid }
+        if let string = payload[key] as? String { return UUID(uuidString: string) }
+        return nil
+    }
+
+    private func payloadPriority(_ payload: [String: Any]) -> Int? {
+        if let intVal = payload["priority"] as? Int { return intVal }
+        if let number = payload["priority"] as? NSNumber { return number.intValue }
+        return nil
+    }
+
+    private func publishAppliedAction(type: AIActionType, date: Date?) {
+        var userInfo: [String: Any] = [
+            "type": type.rawValue
+        ]
+        if let date { userInfo["date"] = date }
+        NotificationCenter.default.post(name: .aiDidApplyAction, object: nil, userInfo: userInfo)
     }
 
     private func fetchEvent(byTitle title: String, start: Date, end: Date) async throws -> EventEntity? {
@@ -861,6 +1030,7 @@ final class AIIntentService: ObservableObject {
         do {
             isProcessing = true
             try await executeAction(action)
+            emitToast(successToast(for: action))
             pendingAction = nil
             showingPreview = false
             isProcessing = false

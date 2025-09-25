@@ -1,3 +1,4 @@
+#if os(iOS)
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -191,3 +192,10 @@ struct ModelManagerView_Previews: PreviewProvider {
         NavigationView { ModelManagerView() }
     }
 }
+#else
+import SwiftUI
+
+struct ModelManagerView: View {
+    var body: some View { Text("Только на iOS") }
+}
+#endif

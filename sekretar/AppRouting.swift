@@ -8,6 +8,7 @@ extension Notification.Name {
     static let openTasksOn = Notification.Name("SekretarOpenTasks")
     static let focusCalendarDate = Notification.Name("SekretarFocusCalendarDate")
     static let dismissKeyboard = Notification.Name("SekretarDismissKeyboard")
+    static let aiDidApplyAction = Notification.Name("SekretarAIDidApplyAction")
 }
 
 struct OpenLink: Identifiable, Equatable {

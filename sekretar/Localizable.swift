@@ -46,6 +46,20 @@ struct L10n {
         static let upcoming = L10n.string("tasks.upcoming")
     }
     
+    // MARK: - Calendar
+    struct Calendar {
+        static let newEvent = L10n.string("calendar.new_event")
+        static let editEvent = L10n.string("calendar.edit_event")
+        static let deleteEventConfirmation = L10n.string("calendar.delete_event_confirmation")
+        static let deleteEventMessage = L10n.string("calendar.delete_event_message")
+        static let eventTitle = L10n.string("calendar.event_title")
+        static let eventTitlePlaceholder = L10n.string("calendar.event_title_placeholder")
+        static let eventTime = L10n.string("calendar.event_time")
+        static let startDate = L10n.string("calendar.start_date")
+        static let endDate = L10n.string("calendar.end_date")
+        static let notes = L10n.string("calendar.notes")
+    }
+
     // MARK: - Today View
     struct Today {
         static let hello = L10n.string("today.hello")
@@ -119,6 +133,8 @@ struct L10n {
         static let addEnd = L10n.string("ai.inline.add_end")
         static let allDay = L10n.string("ai.inline.all_day")
         static let removeSchedule = L10n.string("ai.inline.remove_schedule")
+        static let openTaskEditor = L10n.string("ai.inline.open_task_editor")
+        static let openEventEditor = L10n.string("ai.inline.open_event_editor")
     }
 }
 

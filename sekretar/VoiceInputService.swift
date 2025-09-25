@@ -1,4 +1,6 @@
+#if os(iOS)
 import Foundation
+import Combine
 import Speech
 import AVFoundation
 
@@ -76,7 +78,22 @@ final class VoiceInputService: NSObject, ObservableObject {
         transcript = ""
     }
 }
+#else
+import Foundation
+import Combine
 
+@MainActor
+final class VoiceInputService: ObservableObject {
+    @Published private(set) var transcript: String = ""
+    @Published private(set) var isRecording: Bool = false
+
+    func start() async {}
+    func stop() async {}
+    func reset() {}
+}
+#endif
+
+#if os(iOS)
 private extension VoiceInputService {
     func requestMicAuthorization() async -> Bool {
         await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
@@ -86,3 +103,4 @@ private extension VoiceInputService {
         }
     }
 }
+#endif

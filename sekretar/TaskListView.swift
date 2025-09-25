@@ -45,8 +45,10 @@ struct TaskListView: View {
                 tasksList
             }
             .navigationTitle("Задачи")
+#if os(iOS)
             .navigationBarTitleDisplayMode(.large)
             .toolbar {}
+#endif
             .onAppear { cleanupEmptyDraftTasks() }
             .onDisappear {
                 quickFieldFocused = false

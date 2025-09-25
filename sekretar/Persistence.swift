@@ -3,10 +3,12 @@ import CoreData
 
 final class PersistenceController {
     static let shared = PersistenceController()
+    /// Shared Core Data model instance to avoid duplicate NSEntityDescription registrations across containers.
+    private static let sharedModel: NSManagedObjectModel = PersistenceController.makeModel()
+
     let container: NSPersistentContainer
 
-    init(inMemory: Bool = false) {
-        let model = Self.makeModel()
+    init(inMemory: Bool = false, model: NSManagedObjectModel = PersistenceController.sharedModel) {
         container = NSPersistentContainer(name: "Sekretar", managedObjectModel: model)
         if inMemory {
             let description = NSPersistentStoreDescription()

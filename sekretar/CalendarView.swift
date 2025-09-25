@@ -48,9 +48,11 @@ struct CalendarView: View {
                         }
                     }
                 }
+#if os(iOS)
                 .navigationBarItems(trailing: Button("Готово") {
                     showingDayTasks = false
                 })
+#endif
             }
         }
     }

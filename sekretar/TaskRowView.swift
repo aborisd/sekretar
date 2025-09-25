@@ -27,7 +27,9 @@ struct TaskRowView: View {
                     }
                 }
                 
+#if canImport(UIKit)
                 UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+#endif
             } label: {
                 ZStack {
                     Circle()

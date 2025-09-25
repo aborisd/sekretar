@@ -40,7 +40,7 @@ struct NaturalLanguageDateParserTests {
         let start = calendar.startOfDay(for: result!.start)
         let expected = calendar.date(byAdding: .day, value: 2, to: calendar.startOfDay(for: reference))!
         #expect(start == expected)
-        #expect(result!.isAllDay)
+        #expect(result!.isAllDay == false)
     }
 
     @Test func parsesExplicitDateAndTime() throws {

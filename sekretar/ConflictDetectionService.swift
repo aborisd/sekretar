@@ -243,7 +243,11 @@ final class ConflictDetectionService: ObservableObject {
     }
     
     private func checkTasksAgainstCalendarEvents(tasks: [TaskEntity], context: NSManagedObjectContext) async {
-        guard EKEventStore.authorizationStatus(for: .event) == .fullAccess else { return }
+        if #available(macOS 14.0, iOS 17.0, *) {
+            guard EKEventStore.authorizationStatus(for: .event) == .fullAccess else { return }
+        } else {
+            guard EKEventStore.authorizationStatus(for: .event) == .authorized else { return }
+        }
         
         for task in tasks {
             guard let taskDate = task.dueDate else { continue }
@@ -296,9 +300,6 @@ final class ConflictDetectionService: ObservableObject {
         
         do {
             let tasks = try context.fetch(request)
-            
-            // Simulate location conflicts based on task tags or notes containing location keywords
-            let locationKeywords = ["office", "home", "meeting", "client", "remote", "onsite"]
             
             for i in 0..<tasks.count {
                 for j in (i+1)..<tasks.count {

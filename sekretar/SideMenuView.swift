@@ -26,6 +26,7 @@ struct SideMenuView: View {
                 footerSection
             }
             .background(DesignSystem.Colors.background)
+#if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -35,6 +36,7 @@ struct SideMenuView: View {
                     .foregroundColor(DesignSystem.Colors.primaryBlue)
                 }
             }
+#endif
         }
         .sheet(isPresented: $showModelManager) {
             NavigationView { ModelManagerView() }

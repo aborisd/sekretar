@@ -32,6 +32,18 @@
 "tasks.completed" = "Completed";
 "tasks.upcoming" = "Upcoming";
 
+/* Calendar */
+"calendar.new_event" = "New Event";
+"calendar.edit_event" = "Edit Event";
+"calendar.delete_event_confirmation" = "Delete this event?";
+"calendar.delete_event_message" = "This event will be removed from the calendar.";
+"calendar.event_title" = "Event Title";
+"calendar.event_title_placeholder" = "Describe the meeting";
+"calendar.event_time" = "Schedule";
+"calendar.start_date" = "Start";
+"calendar.end_date" = "End";
+"calendar.notes" = "Notes";
+
 /* Today View */
 "today.hello" = "Hello! 👋";
 "today.todays_tasks" = "Today's Tasks";
@@ -91,3 +103,5 @@
 "ai.inline.add_end" = "Add end time";
 "ai.inline.all_day" = "All day";
 "ai.inline.remove_schedule" = "Remove schedule";
+"ai.inline.open_task_editor" = "Open task editor";
+"ai.inline.open_event_editor" = "Open event editor";

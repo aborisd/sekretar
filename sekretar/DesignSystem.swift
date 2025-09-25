@@ -1,6 +1,8 @@
 import SwiftUI
 #if canImport(UIKit)
 import UIKit
+#elseif canImport(AppKit)
+import AppKit
 #endif
 
 // MARK: - Design System
@@ -39,14 +41,62 @@ struct DesignSystem {
         )
         
         // Background Colors
-        static let background = Color(.systemGroupedBackground)
-        static let secondaryBackground = Color(.secondarySystemGroupedBackground)
-        static let cardBackground = Color(.systemBackground)
-        
+        static let background: Color = {
+#if canImport(UIKit)
+            return Color(UIColor.systemGroupedBackground)
+#elseif canImport(AppKit)
+            return Color(NSColor.windowBackgroundColor)
+#else
+            return Color(.sRGB, red: 0.95, green: 0.95, blue: 0.97, opacity: 1)
+#endif
+        }()
+        static let secondaryBackground: Color = {
+#if canImport(UIKit)
+            return Color(UIColor.secondarySystemGroupedBackground)
+#elseif canImport(AppKit)
+            return Color(NSColor.controlBackgroundColor)
+#else
+            return Color(.sRGB, red: 0.9, green: 0.9, blue: 0.92, opacity: 1)
+#endif
+        }()
+        static let cardBackground: Color = {
+#if canImport(UIKit)
+            return Color(UIColor.systemBackground)
+#elseif canImport(AppKit)
+            return Color(NSColor.windowBackgroundColor)
+#else
+            return Color.white
+#endif
+        }()
+
         // Semantic Colors
-        static let textPrimary = Color(.label)
-        static let textSecondary = Color(.secondaryLabel)
-        static let textTertiary = Color(.tertiaryLabel)
+        static let textPrimary: Color = {
+#if canImport(UIKit)
+            return Color(UIColor.label)
+#elseif canImport(AppKit)
+            return Color(NSColor.labelColor)
+#else
+            return Color.primary
+#endif
+        }()
+        static let textSecondary: Color = {
+#if canImport(UIKit)
+            return Color(UIColor.secondaryLabel)
+#elseif canImport(AppKit)
+            return Color(NSColor.secondaryLabelColor)
+#else
+            return Color.secondary
+#endif
+        }()
+        static let textTertiary: Color = {
+#if canImport(UIKit)
+            return Color(UIColor.tertiaryLabel)
+#elseif canImport(AppKit)
+            return Color(NSColor.tertiaryLabelColor)
+#else
+            return Color.gray
+#endif
+        }()
         
         // Priority Colors
         static let priorityHigh = Color.red

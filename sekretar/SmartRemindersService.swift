@@ -1,3 +1,4 @@
+#if os(iOS)
 import Foundation
 import CoreLocation
 import UserNotifications
@@ -339,6 +340,37 @@ final class SmartRemindersService: NSObject, ObservableObject {
     }
 }
 
+#else
+import Foundation
+import CoreLocation
+import CoreData
+
+@MainActor
+final class SmartRemindersService: ObservableObject {
+    static let shared = SmartRemindersService()
+
+    enum SmartReminderType: String, CaseIterable {
+        case locationBased, timeBased, contextual, adaptive
+    }
+
+    enum LocationContext: String, CaseIterable {
+        case home, work, store, gym, custom
+    }
+
+    @Published var isLocationEnabled = false
+    @Published var currentLocation: CLLocation? = nil
+
+    private init() {}
+
+    func requestLocationPermission() async -> Bool { false }
+
+    func scheduleSmartReminder(for task: TaskEntity, type: SmartReminderType) async {}
+
+    func saveUserLocation(_ location: CLLocation, for context: LocationContext, name: String) {}
+}
+#endif
+
+#if os(iOS)
 // MARK: - CLLocationManagerDelegate
 extension SmartRemindersService: CLLocationManagerDelegate {
     nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
@@ -366,6 +398,7 @@ extension SmartRemindersService: CLLocationManagerDelegate {
         print("❌ Location manager error: \(error.localizedDescription)")
     }
 }
+#endif
 
 // MARK: - Analytics Extension
 extension AnalyticsEvent {

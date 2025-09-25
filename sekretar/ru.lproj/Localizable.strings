@@ -32,6 +32,18 @@
 "tasks.completed" = "Завершено";
 "tasks.upcoming" = "Скоро";
 
+/* Calendar */
+"calendar.new_event" = "Новое событие";
+"calendar.edit_event" = "Редактирование события";
+"calendar.delete_event_confirmation" = "Удалить это событие?";
+"calendar.delete_event_message" = "Событие будет удалено из календаря.";
+"calendar.event_title" = "Название события";
+"calendar.event_title_placeholder" = "О чем встреча";
+"calendar.event_time" = "Расписание";
+"calendar.start_date" = "Начало";
+"calendar.end_date" = "Окончание";
+"calendar.notes" = "Заметки";
+
 /* Today View */
 "today.hello" = "Привет! 👋";
 "today.todays_tasks" = "Задачи на сегодня";
@@ -91,3 +103,5 @@
 "ai.inline.add_end" = "Добавить время окончания";
 "ai.inline.all_day" = "Весь день";
 "ai.inline.remove_schedule" = "Убрать расписание";
+"ai.inline.open_task_editor" = "Открыть редактор задачи";
+"ai.inline.open_event_editor" = "Открыть редактор события";

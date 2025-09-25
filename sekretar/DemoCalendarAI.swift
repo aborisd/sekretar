@@ -1,4 +1,9 @@
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 
 struct DemoCalendarAI: App {
     let persistence = PersistenceController.shared
@@ -25,27 +30,41 @@ struct DemoContentView: View {
                 TabView(selection: $selectedTab) {
                     // Вкладка "Главная"
                     NavigationView {
+#if canImport(UIKit)
                         Color(UIColor.systemBackground)
                             .ignoresSafeArea()
+#elseif canImport(AppKit)
+                        Color(NSColor.windowBackgroundColor)
+#else
+                        Color.white
+#endif
                     }
+#if os(iOS)
                     .navigationViewStyle(.stack)
+#endif
                     .tag(0)
 
                     // Вкладка "Календарь"
                     NavigationView {
                         CalendarScreen(viewModel: CalendarViewModel(context: context))
                     }
+#if os(iOS)
                     .navigationViewStyle(.stack)
+#endif
                     .tag(1)
 
                     // Вкладка "Задачи"
                     NavigationView {
                         TaskListView(viewModel: TaskListViewModel(repo: TaskRepositoryCD(context: context)))
                     }
+#if os(iOS)
                     .navigationViewStyle(.stack)
+#endif
                     .tag(2)
                 }
+#if os(iOS)
                 .tabViewStyle(.page(indexDisplayMode: .never)) // свайп между разделами
+#endif
 
                 // Custom bottom toolbar to switch tabs
                 CustomTabBar(selected: $selectedTab)

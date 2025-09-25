@@ -1,3 +1,4 @@
+#if os(iOS)
 import SwiftUI
 import CoreData
 
@@ -439,3 +440,23 @@ extension Color {
         )
     }
 }
+#else
+import SwiftUI
+import CoreData
+
+struct TaskEditorView: View {
+    let task: TaskEntity
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Text("Task editing is not available on this platform")
+                .font(.headline)
+                .multilineTextAlignment(.center)
+            Text(task.title ?? "")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+        }
+        .padding()
+    }
+}
+#endif

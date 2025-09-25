@@ -1,3 +1,4 @@
+#if os(iOS)
 import SwiftUI
 
 struct AIActionPreviewView: View {
@@ -293,6 +294,23 @@ struct AIActionPreviewView: View {
         }
     }
 }
+#else
+import SwiftUI
+
+struct AIActionPreviewView: View {
+    let action: AIAction
+    let onConfirm: () -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Text("Просмотр действий доступен только на iOS")
+            Button("Закрыть", action: onCancel)
+        }
+        .padding()
+    }
+}
+#endif
 
 // MARK: - Payload Row View
 struct PayloadRowView: View {

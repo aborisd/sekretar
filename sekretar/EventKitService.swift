@@ -20,7 +20,7 @@ final class EventKitService: ObservableObject, EventKitServiceProtocol {
     }
 
     func requestAccess() async -> Bool {
-        if #available(iOS 17, *) {
+        if #available(iOS 17, macOS 14, *) {
             return (try? await store.requestFullAccessToEvents()) ?? false
         } else {
             return await withCheckedContinuation { cont in

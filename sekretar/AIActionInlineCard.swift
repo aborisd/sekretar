@@ -4,6 +4,8 @@ struct AIActionInlineCard: View {
     @Binding var action: AIAction
     let onConfirm: () -> Void
     let onCancel: () -> Void
+    let onOpenTaskEditor: ((AIAction) -> Void)?
+    let onOpenEventEditor: ((AIAction) -> Void)?
 
     @State private var editedTitle: String
     @State private var editedNotes: String
@@ -16,10 +18,18 @@ struct AIActionInlineCard: View {
     private let defaultDuration: TimeInterval = 3600
     private let handledKeys: Set<String> = ["title", "notes", "start", "end", "is_all_day", "priority"]
 
-    init(action: Binding<AIAction>, onConfirm: @escaping () -> Void, onCancel: @escaping () -> Void) {
+    init(
+        action: Binding<AIAction>,
+        onConfirm: @escaping () -> Void,
+        onCancel: @escaping () -> Void,
+        onOpenTaskEditor: ((AIAction) -> Void)? = nil,
+        onOpenEventEditor: ((AIAction) -> Void)? = nil
+    ) {
         self._action = action
         self.onConfirm = onConfirm
         self.onCancel = onCancel
+        self.onOpenTaskEditor = onOpenTaskEditor
+        self.onOpenEventEditor = onOpenEventEditor
 
         let payload = action.wrappedValue.payload
         _editedTitle = State(initialValue: (payload["title"] as? String) ?? action.wrappedValue.title)
@@ -133,6 +143,8 @@ struct AIActionInlineCard: View {
                     .background(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.secondary.opacity(0.2)))
                 }
             }
+
+            advancedEditorButton
         }
     }
 
@@ -205,6 +217,27 @@ struct AIActionInlineCard: View {
         }
     }
 
+    @ViewBuilder
+    private var advancedEditorButton: some View {
+        if let handler = onOpenTaskEditor, supportsTaskEditor {
+            Button {
+                handler(action)
+            } label: {
+                Label(L10n.AIInline.openTaskEditor, systemImage: "square.and.pencil")
+                    .font(.caption)
+            }
+            .buttonStyle(.bordered)
+        } else if let handler = onOpenEventEditor, supportsEventEditor {
+            Button {
+                handler(action)
+            } label: {
+                Label(L10n.AIInline.openEventEditor, systemImage: "calendar")
+                    .font(.caption)
+            }
+            .buttonStyle(.bordered)
+        }
+    }
+
     private var otherItems: [PreviewItem] {
         action.payload.compactMap { key, value in
             guard !handledKeys.contains(key), let display = displayValue(value) else { return nil }
@@ -235,6 +268,14 @@ struct AIActionInlineCard: View {
 
     private var showNotesField: Bool {
         action.type == .createTask || action.type == .createEvent || !editedNotes.isEmpty
+    }
+
+    private var supportsTaskEditor: Bool {
+        action.type == .createTask || action.type == .updateTask
+    }
+
+    private var supportsEventEditor: Bool {
+        action.type == .createEvent || action.type == .updateEvent
     }
 
     private var priorityBinding: Binding<Int>? {
