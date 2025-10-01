@@ -105,3 +105,68 @@
 "ai.inline.remove_schedule" = "Убрать расписание";
 "ai.inline.open_task_editor" = "Открыть редактор задачи";
 "ai.inline.open_event_editor" = "Открыть редактор события";
+
+/* Bulk Operations */
+"bulk.complete" = "Завершить выбранные";
+"bulk.delete" = "Удалить выбранные";
+"bulk.change_priority" = "Изменить приоритет";
+"bulk.move_to_project" = "Переместить в проект";
+"bulk.add_tags" = "Добавить теги";
+"bulk.set_due_date" = "Установить срок";
+"bulk.auto_schedule" = "Автопланирование";
+"bulk.duplicate" = "Дублировать";
+"bulk.selected_count" = "Выбрано: %d";
+
+/* Smart Scheduling */
+"schedule.smart_slots" = "Умные слоты времени";
+"schedule.no_slots_found" = "Подходящие слоты не найдены";
+"schedule.best_slot" = "Лучший слот";
+"schedule.deep_work_time" = "Время глубокой работы";
+"schedule.suggested_for" = "Предложено для: %@";
+
+/* Privacy & Data */
+"privacy.title" = "Конфиденциальность и данные";
+"privacy.privacy_first" = "Конфиденциальность прежде всего";
+"privacy.your_control" = "Ваши данные, ваш контроль";
+"privacy.description" = "Sekretar разработан с учетом конфиденциальности. Все ваши данные хранятся локально на устройстве в зашифрованном виде.";
+"privacy.mode" = "Режим конфиденциальности";
+"privacy.enhanced_privacy" = "Усиленная конфиденциальность";
+"privacy.mask_pii" = "Маскировать личные данные перед отправкой в облачные AI сервисы";
+"privacy.mode_active" = "Режим конфиденциальности активен: email, номера телефонов и адреса будут замаскированы";
+"privacy.data_management" = "Управление данными";
+"privacy.gdpr_compliance" = "В соответствии с GDPR, у вас есть полный контроль над вашими данными:";
+"privacy.export_data" = "Экспортировать данные";
+"privacy.export_description" = "Скачать все ваши данные в формате JSON";
+"privacy.delete_all" = "Удалить все данные";
+"privacy.delete_description" = "Безвозвратно удалить все ваши данные";
+"privacy.delete_confirmation_title" = "Удалить все данные";
+"privacy.delete_confirmation_message" = "Это действие безвозвратно удалит все ваши задачи, события и настройки. Отменить это действие будет невозможно.";
+"privacy.your_data" = "Ваши данные";
+"privacy.tasks_count" = "Задач: %d";
+"privacy.events_count" = "Событий: %d";
+"privacy.projects_count" = "Проектов: %d";
+
+/* Performance */
+"performance.monitoring" = "Мониторинг производительности";
+"performance.fps" = "FPS: %.1f";
+"performance.metrics" = "Метрики";
+"performance.budget_exceeded" = "Превышен бюджет производительности";
+
+/* Offline Sync */
+"sync.offline" = "Оффлайн";
+"sync.online" = "Онлайн";
+"sync.syncing" = "Синхронизация...";
+"sync.pending_operations" = "Операций в очереди: %d";
+"sync.last_sync" = "Последняя синхронизация: %@";
+"sync.sync_failed" = "Ошибка синхронизации";
+"sync.retry" = "Повторить";
+
+/* Widgets */
+"widget.today.title" = "Задачи на сегодня";
+"widget.today.description" = "Просмотр задач на сегодня";
+"widget.quick_add.title" = "Быстрое добавление";
+"widget.quick_add.description" = "Быстро добавить новую задачу";
+"widget.next_task.title" = "Следующая задача";
+"widget.next_task.description" = "Показать следующую приоритетную задачу";
+"widget.no_tasks" = "Нет задач";
+"widget.all_done" = "Всё готово!";

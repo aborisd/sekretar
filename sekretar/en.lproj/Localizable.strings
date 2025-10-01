@@ -105,3 +105,68 @@
 "ai.inline.remove_schedule" = "Remove schedule";
 "ai.inline.open_task_editor" = "Open task editor";
 "ai.inline.open_event_editor" = "Open event editor";
+
+/* Bulk Operations */
+"bulk.complete" = "Complete Selected";
+"bulk.delete" = "Delete Selected";
+"bulk.change_priority" = "Change Priority";
+"bulk.move_to_project" = "Move to Project";
+"bulk.add_tags" = "Add Tags";
+"bulk.set_due_date" = "Set Due Date";
+"bulk.auto_schedule" = "Auto Schedule";
+"bulk.duplicate" = "Duplicate";
+"bulk.selected_count" = "%d selected";
+
+/* Smart Scheduling */
+"schedule.smart_slots" = "Smart Time Slots";
+"schedule.no_slots_found" = "No suitable slots found";
+"schedule.best_slot" = "Best Slot";
+"schedule.deep_work_time" = "Deep Work Time";
+"schedule.suggested_for" = "Suggested for: %@";
+
+/* Privacy & Data */
+"privacy.title" = "Privacy & Data";
+"privacy.privacy_first" = "Privacy First";
+"privacy.your_control" = "Your data, your control";
+"privacy.description" = "Sekretar is designed with privacy as a core principle. All your data is stored locally on your device and encrypted.";
+"privacy.mode" = "Privacy Mode";
+"privacy.enhanced_privacy" = "Enhanced Privacy";
+"privacy.mask_pii" = "Mask personal information before sending to cloud AI services";
+"privacy.mode_active" = "Privacy mode active: emails, phone numbers, and addresses will be masked";
+"privacy.data_management" = "Data Management";
+"privacy.gdpr_compliance" = "In compliance with GDPR, you have full control over your data:";
+"privacy.export_data" = "Export Your Data";
+"privacy.export_description" = "Download all your data in JSON format";
+"privacy.delete_all" = "Delete All Data";
+"privacy.delete_description" = "Permanently remove all your data";
+"privacy.delete_confirmation_title" = "Delete All Data";
+"privacy.delete_confirmation_message" = "This will permanently delete all your tasks, events, and settings. This action cannot be undone.";
+"privacy.your_data" = "Your Data";
+"privacy.tasks_count" = "%d Tasks";
+"privacy.events_count" = "%d Events";
+"privacy.projects_count" = "%d Projects";
+
+/* Performance */
+"performance.monitoring" = "Performance Monitoring";
+"performance.fps" = "FPS: %.1f";
+"performance.metrics" = "Metrics";
+"performance.budget_exceeded" = "Performance budget exceeded";
+
+/* Offline Sync */
+"sync.offline" = "Offline";
+"sync.online" = "Online";
+"sync.syncing" = "Syncing...";
+"sync.pending_operations" = "%d pending operations";
+"sync.last_sync" = "Last sync: %@";
+"sync.sync_failed" = "Sync failed";
+"sync.retry" = "Retry";
+
+/* Widgets */
+"widget.today.title" = "Today's Tasks";
+"widget.today.description" = "View your tasks for today";
+"widget.quick_add.title" = "Quick Add Task";
+"widget.quick_add.description" = "Quickly add a new task";
+"widget.next_task.title" = "Next Task";
+"widget.next_task.description" = "Show your next priority task";
+"widget.no_tasks" = "No tasks";
+"widget.all_done" = "All Done!";
