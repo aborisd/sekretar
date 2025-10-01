@@ -12,7 +12,14 @@ final class AIIntentService: ObservableObject {
     @Published var showingPreview = false
     @Published var lastResultToast: String?
     @Published var lastOpenLink: OpenLink?
-    
+    @Published var isChatLLMEnabled: Bool {
+        didSet {
+            if oldValue != isChatLLMEnabled {
+                UserDefaults.standard.set(isChatLLMEnabled, forKey: Self.chatModeStorageKey)
+            }
+        }
+    }
+
     private let llmProvider: LLMProviderProtocol
     private let context: NSManagedObjectContext
     private let naturalLanguageParser = NaturalLanguageDateParser()
@@ -22,10 +29,19 @@ final class AIIntentService: ObservableObject {
          llmProvider: LLMProviderProtocol = AIProviderFactory.current()) {
         self.context = context
         self.llmProvider = llmProvider
+        let stored = UserDefaults.standard.object(forKey: Self.chatModeStorageKey) as? Bool
+        self.isChatLLMEnabled = stored ?? true
     }
-    
+
+    private static let chatModeStorageKey = "ai.chat.llm.enabled"
+
     func chatResponse(for input: String) async throws -> String {
         try await llmProvider.generateResponse(input)
+    }
+
+    func setChatLLMEnabled(_ enabled: Bool) {
+        guard isChatLLMEnabled != enabled else { return }
+        isChatLLMEnabled = enabled
     }
     
     // MARK: - Main Processing Method
@@ -447,6 +463,7 @@ final class AIIntentService: ObservableObject {
             throw AIError.missingRequiredField("title")
         }
         let due: Date? = action.payload["start"] as? Date
+        var createdTask: TaskEntity?
         await context.perform {
             let task = TaskEntity(context: self.context)
             task.id = UUID()
@@ -460,11 +477,13 @@ final class AIIntentService: ObservableObject {
             task.dueDate = due
             
             try? self.context.save()
+            createdTask = task
         }
         // Предложим открыть список задач на соответствующую дату
         self.lastOpenLink = OpenLink(tab: .tasks, date: due)
 
         publishAppliedAction(type: action.type, date: due)
+        if let task = createdTask { highlightTaskItem(id: task.objectID, date: due) }
 
         // If schedule is present, create a calendar event, too
         if let start = action.payload["start"] as? Date,
@@ -482,6 +501,7 @@ final class AIIntentService: ObservableObject {
             }
             if let created = try? await fetchEvent(byTitle: title, start: start, end: end) {
                 try? await EventKitService(context: context).syncToEventKit(created)
+                highlightCalendarItem(id: created.objectID, date: start)
             }
             self.lastOpenLink = OpenLink(tab: .calendar, date: start)
         }
@@ -516,6 +536,7 @@ final class AIIntentService: ObservableObject {
         let focusDate = (action.payload["start"] as? Date) ?? (action.payload["end"] as? Date)
         lastOpenLink = OpenLink(tab: .tasks, date: focusDate)
         publishAppliedAction(type: action.type, date: focusDate)
+        highlightTaskItem(id: task.objectID, date: focusDate)
     }
     
     private func executeDeleteTask(_ action: AIAction) async throws {
@@ -556,6 +577,7 @@ final class AIIntentService: ObservableObject {
         if let created { try? await EventKitService(context: context).syncToEventKit(created) }
         self.lastOpenLink = OpenLink(tab: .calendar, date: start)
         publishAppliedAction(type: action.type, date: start)
+        if let created { highlightCalendarItem(id: created.objectID, date: start) }
     }
     
     private func executeUpdateEvent(_ action: AIAction) async throws {
@@ -591,6 +613,7 @@ final class AIIntentService: ObservableObject {
         let focusDate = event.startDate
         lastOpenLink = OpenLink(tab: .calendar, date: focusDate)
         publishAppliedAction(type: action.type, date: focusDate)
+        highlightCalendarItem(id: event.objectID, date: focusDate)
     }
     
     private func executeDeleteEvent(_ action: AIAction) async throws {
@@ -616,33 +639,55 @@ final class AIIntentService: ObservableObject {
     }
     
     private func executeSuggestTimeSlots(_ action: AIAction) async throws {
-        // Implementation for time slot suggestions
-        let tasks = try await fetchCurrentTasks()
-        let optimization = try await llmProvider.optimizeSchedule(tasks)
-        
-        // Update the action with suggestions
+        // Use new AutoSchedulerService for smart slot generation
+        let autoScheduler = AutoSchedulerService.shared
+
+        // Fetch unscheduled tasks
+        let fetchReq: NSFetchRequest<TaskEntity> = TaskEntity.fetchRequest()
+        fetchReq.predicate = NSPredicate(format: "isCompleted == NO AND dueDate == nil")
+        let tasks = try await context.perform { try self.context.fetch(fetchReq) }
+
+        // Generate slots for each task using AutoScheduler
+        var allSlots: [(task: TaskEntity, slots: [TimeSlot])] = []
+        for task in tasks {
+            let slots = await autoScheduler.suggestTimeSlots(for: task, context: context)
+            if !slots.isEmpty {
+                allSlots.append((task, slots))
+            }
+        }
+
+        // Build suggestions from slots
         var updatedPayload = action.payload
         let df = ISO8601DateFormatter()
         df.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let suggestions: [[String: Any]] = optimization.optimizedTasks.map { item in
-            [
-                "task_id": item.taskId.uuidString,
-                "suggested_start": df.string(from: item.suggestedStartTime),
-                "suggested_duration_sec": Int(item.suggestedDuration),
-                "confidence": item.confidence
-            ]
+
+        let suggestions: [[String: Any]] = allSlots.flatMap { taskSlotPair -> [[String: Any]] in
+            // Use best slot (first one) for each task
+            guard let bestSlot = taskSlotPair.slots.first,
+                  let taskId = taskSlotPair.task.id else { return [] }
+
+            return [[
+                "task_id": taskId.uuidString,
+                "task_title": taskSlotPair.task.title ?? "Untitled",
+                "suggested_start": df.string(from: bestSlot.start),
+                "suggested_duration_sec": Int(bestSlot.duration),
+                "confidence": 0.9,
+                "is_deep_work": bestSlot.isDeepWorkTime,
+                "slot_display": bestSlot.displayTime
+            ]]
         }
+
         updatedPayload["suggestions"] = suggestions
-        updatedPayload["reasoning"] = optimization.reasoning
-        updatedPayload["productivity_score"] = optimization.productivityScore
+        updatedPayload["reasoning"] = "Smart slots based on calendar availability, priority, and deep work hours"
+        updatedPayload["productivity_score"] = 0.85
 
         let title = "Suggested Time Slots"
-        let desc = suggestions.isEmpty ? "No suitable free slots found." : "Found \(suggestions.count) suggestion(s). Review and confirm to apply."
+        let desc = suggestions.isEmpty ? "No suitable free slots found." : "Found \(suggestions.count) smart slot(s) for your tasks."
         let preview = AIAction(
             type: .suggestTimeSlots,
             title: title,
             description: desc,
-            confidence: 0.85,
+            confidence: 0.9,
             requiresConfirmation: true,
             payload: updatedPayload
         )
@@ -687,6 +732,7 @@ final class AIIntentService: ObservableObject {
             if let created = try? await fetchEvent(byTitle: title, start: startDate, end: endDate) {
                 try? await svc.syncToEventKit(created)
                 publishAppliedAction(type: .createEvent, date: startDate)
+                highlightCalendarItem(id: created.objectID, date: startDate)
             }
         }
 
@@ -816,6 +862,18 @@ final class AIIntentService: ObservableObject {
         NotificationCenter.default.post(name: .aiDidApplyAction, object: nil, userInfo: userInfo)
     }
 
+    private func highlightCalendarItem(id: NSManagedObjectID, date: Date?) {
+        var info: [String: Any] = ["id": id]
+        if let date { info["date"] = date }
+        NotificationCenter.default.post(name: .highlightCalendarItem, object: nil, userInfo: info)
+    }
+
+    private func highlightTaskItem(id: NSManagedObjectID, date: Date?) {
+        var info: [String: Any] = ["id": id]
+        if let date { info["date"] = date }
+        NotificationCenter.default.post(name: .highlightTaskItem, object: nil, userInfo: info)
+    }
+
     private func fetchEvent(byTitle title: String, start: Date, end: Date) async throws -> EventEntity? {
         return try await context.perform {
             let fr: NSFetchRequest<EventEntity> = EventEntity.fetchRequest()
@@ -849,6 +907,15 @@ final class AIIntentService: ObservableObject {
         s = s.replacingOccurrences(of: #"\bв\s*([01]?\d|2[0-3])([:\\.][0-5]\d)?\b"#, with: " ", options: .regularExpression)
         ["сегодня","завтра","послезавтра","today","tomorrow","day after","утра","вечера","дня","ночи"].forEach { s = s.replacingOccurrences(of: $0, with: " ", options: .caseInsensitive) }
         s = s.replacingOccurrences(of: #"с\s*([01]?\d|2[0-3])([:\\.][0-5]\d)?\s*до\s*([01]?\d|2[0-3])([:\\.][0-5]\d)?"#, with: " ", options: .regularExpression)
+        let wordNumbers = [
+            "ноль","один","одна","одну","два","две","три","четыре","пять","шесть","семь","восемь","девять","десять",
+            "одиннадцать","двенадцать","тринадцать","четырнадцать","пятнадцать","шестнадцать","семнадцать","восемнадцать","девятнадцать","двадцать",
+            "тридцать","сорок","пятьдесят","half","one","two","three","four","five","six","seven","eight","nine","ten","eleven","twelve"
+        ]
+        for word in wordNumbers {
+            let pattern = "\\b\(word)\\b"
+            s = s.replacingOccurrences(of: pattern, with: " ", options: [.regularExpression, .caseInsensitive])
+        }
 
         let cleaned = s.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)

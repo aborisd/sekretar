@@ -1,6 +1,8 @@
 import Foundation
 import CoreData
 
+#if os(macOS)
+
 @objc(TaskEntity)
 final class TaskEntity: NSManagedObject {
     @nonobjc class func fetchRequest() -> NSFetchRequest<TaskEntity> {
@@ -20,7 +22,7 @@ final class TaskEntity: NSManagedObject {
     @NSManaged var updatedAt: Date?
     @NSManaged var project: ProjectEntity?
 }
-
+ 
 @objc(EventEntity)
 final class EventEntity: NSManagedObject {
     @nonobjc class func fetchRequest() -> NSFetchRequest<EventEntity> {
@@ -76,3 +78,5 @@ final class AIActionLogEntity: NSManagedObject {
     @NSManaged var createdAt: Date?
     @NSManaged var executedAt: Date?
 }
+
+#endif

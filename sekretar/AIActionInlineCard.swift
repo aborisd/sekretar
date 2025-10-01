@@ -16,7 +16,9 @@ struct AIActionInlineCard: View {
     @State private var isSyncingFromAction = false
 
     private let defaultDuration: TimeInterval = 3600
-    private let handledKeys: Set<String> = ["title", "notes", "start", "end", "is_all_day", "priority"]
+    private let handledKeys: Set<String> = [
+        "title", "notes", "start", "end", "is_all_day", "priority", "category", "estimated_duration", "suggested_tags"
+    ]
 
     init(
         action: Binding<AIAction>,
@@ -47,31 +49,36 @@ struct AIActionInlineCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 16) {
             header
-            descriptionSection
-            editableFields
-            if !otherItems.isEmpty {
-                Divider()
-                VStack(alignment: .leading, spacing: 6) {
-                    ForEach(otherItems) { item in
-                        HStack(alignment: .top, spacing: 8) {
-                            Text(item.title)
-                                .foregroundStyle(.secondary)
-                            Spacer(minLength: 8)
-                            Text(item.value)
-                                .fontWeight(.medium)
-                                .multilineTextAlignment(.trailing)
-                        }
-                        .font(.caption)
-                    }
-                }
+
+            if !highlightChips.isEmpty {
+                highlightsSection
             }
+
+            descriptionSection
+
+            if !quickActions.isEmpty {
+                quickActionsSection
+            }
+
+            editableFields
+
+            if !otherItems.isEmpty {
+                Divider().padding(.vertical, 4)
+                payloadSection
+            }
+
             actionButtons
         }
-        .padding(12)
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .padding(18)
+        .background(DesignSystem.Colors.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(borderColor, lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.06), radius: 12, x: 0, y: 6)
         .onAppear { seedFromAction() }
         .onChange(of: action.id) { _ in seedFromAction() }
         .onChange(of: editedTitle) { _ in syncPayload() }
@@ -82,21 +89,164 @@ struct AIActionInlineCard: View {
         .onChange(of: editedIsAllDay) { _ in adjustForAllDayChange() }
     }
 
+    // MARK: - Header & Summary
+
     private var header: some View {
-        HStack(spacing: 8) {
-            Image(systemName: action.type.icon)
-                .foregroundStyle(actionColor)
-            Text(action.title)
-                .font(.headline)
+        HStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(actionColor.opacity(0.12))
+                    .frame(width: 44, height: 44)
+                Image(systemName: action.type.icon)
+                    .foregroundStyle(actionColor)
+                    .font(.system(size: 20, weight: .semibold))
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(actionTypeLabel)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .textCase(.uppercase)
+                Text(action.title)
+                    .font(.headline)
+                    .foregroundStyle(DesignSystem.Colors.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
+
+            VStack(alignment: .trailing, spacing: 6) {
+                confidenceBadge
+                confirmationBadge
+            }
         }
     }
 
     private var descriptionSection: some View {
         Text(action.description)
             .font(.subheadline)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(DesignSystem.Colors.textSecondary)
             .fixedSize(horizontal: false, vertical: true)
+            .lineSpacing(2)
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(actionColor.opacity(0.06))
+            )
     }
+
+    private var quickActionsSection: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
+                ForEach(quickActions) { action in
+                    Button(action: action.perform) {
+                        HStack(spacing: 6) {
+                            Image(systemName: action.icon)
+                                .imageScale(.medium)
+                            Text(action.title)
+                                .font(.caption.weight(.medium))
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(action.tint.opacity(0.16))
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(action.tint)
+                }
+            }
+            .padding(.horizontal, 2)
+            .padding(.vertical, 6)
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(DesignSystem.Colors.cardBackground.opacity(0.6))
+        )
+    }
+
+    private var highlightsSection: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), spacing: 8)], spacing: 8) {
+            ForEach(highlightChips) { chip in
+                HStack(alignment: .center, spacing: 8) {
+                    Image(systemName: chip.icon)
+                        .imageScale(.medium)
+                        .foregroundStyle(chip.tint)
+                    Text(chip.text)
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(DesignSystem.Colors.textPrimary)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.85)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(chip.tint.opacity(0.12))
+                )
+            }
+        }
+    }
+
+    private var payloadSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ForEach(otherItems) { item in
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(item.title)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text(item.value)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(DesignSystem.Colors.textPrimary)
+                }
+            }
+        }
+    }
+
+    private var actionButtons: some View {
+        HStack(spacing: 12) {
+            Button(role: .cancel, action: onCancel) {
+                Label(L10n.Common.cancel, systemImage: "xmark")
+                    .labelStyle(.titleAndIcon)
+            }
+            .buttonStyle(.bordered)
+
+            Button {
+                syncPayload()
+                onConfirm()
+            } label: {
+                Label(L10n.Common.save, systemImage: "checkmark")
+                    .labelStyle(.titleAndIcon)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(actionColor)
+        }
+    }
+
+    @ViewBuilder
+    private var advancedEditorButton: some View {
+        if let handler = onOpenTaskEditor, supportsTaskEditor {
+            Button {
+                handler(action)
+            } label: {
+                Label(L10n.AIInline.openTaskEditor, systemImage: "square.and.pencil")
+                    .font(.caption)
+            }
+            .buttonStyle(.bordered)
+        } else if let handler = onOpenEventEditor, supportsEventEditor {
+            Button {
+                handler(action)
+            } label: {
+                Label(L10n.AIInline.openEventEditor, systemImage: "calendar")
+                    .font(.caption)
+            }
+            .buttonStyle(.bordered)
+        }
+    }
+
+    // MARK: - Editable fields
 
     private var editableFields: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -140,7 +290,10 @@ struct AIActionInlineCard: View {
                             .frame(minHeight: 96)
                             .padding(4)
                     }
-                    .background(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.secondary.opacity(0.2)))
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .strokeBorder(Color.secondary.opacity(0.2))
+                    )
                 }
             }
 
@@ -205,37 +358,106 @@ struct AIActionInlineCard: View {
         }
     }
 
-    private var actionButtons: some View {
-        HStack(spacing: 8) {
-            Button(L10n.Common.cancel, role: .cancel, action: onCancel)
-                .buttonStyle(.bordered)
-            Button(L10n.Common.save) {
-                syncPayload()
-                onConfirm()
+    // MARK: - Derived data
+
+    private var highlightChips: [InlineChip] {
+        var chips: [InlineChip] = []
+
+        if let start = editedStart {
+            let title: String
+            if editedIsAllDay {
+                title = Self.dayFormatter.string(from: start)
+            } else {
+                let datePart = Self.dayFormatter.string(from: start)
+                let timePart = Self.timeFormatter.string(from: start)
+                title = "\(datePart), \(timePart)"
             }
-            .buttonStyle(.borderedProminent)
+            chips.append(.init(icon: editedIsAllDay ? "calendar" : "clock", text: title, tint: actionColor))
         }
+
+        if let end = editedEnd, !editedIsAllDay, let start = editedStart, end > start {
+            let timePart = Self.timeFormatter.string(from: end)
+            chips.append(.init(icon: "clock.arrow.circlepath", text: durationText(from: start, to: end, fallbackTime: timePart), tint: actionColor))
+        }
+
+        if let priority = editedPriority {
+            let tint = priorityTint(for: priority)
+            chips.append(.init(icon: "flag.fill", text: priorityLabel(for: priority), tint: tint))
+        }
+
+        if let category = action.payload["category"] as? String, !category.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            chips.append(.init(icon: "square.grid.2x2", text: category.capitalized, tint: DesignSystem.Colors.primaryTeal))
+        }
+
+        if let durationMinutes = durationMinutesFromPayload {
+            let text = formattedDuration(minutes: durationMinutes)
+            chips.append(.init(icon: "hourglass", text: text, tint: DesignSystem.Colors.primaryBlue))
+        }
+
+        if let tags = action.payload["suggested_tags"] as? [String] {
+            for tag in tags.prefix(2) {
+                let trimmed = tag.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { continue }
+                chips.append(.init(icon: "number", text: "#\(trimmed)", tint: DesignSystem.Colors.textSecondary))
+            }
+        }
+
+        return chips
     }
 
-    @ViewBuilder
-    private var advancedEditorButton: some View {
-        if let handler = onOpenTaskEditor, supportsTaskEditor {
-            Button {
-                handler(action)
-            } label: {
-                Label(L10n.AIInline.openTaskEditor, systemImage: "square.and.pencil")
-                    .font(.caption)
+    private var quickActions: [QuickActionItem] {
+        var actions: [QuickActionItem] = []
+
+        if editedStart != nil {
+            if !editedIsAllDay {
+                actions.append(QuickActionItem(
+                    title: isRussian ? "−30 мин" : "−30 min",
+                    icon: "clock.arrow.circlepath",
+                    tint: DesignSystem.Colors.primaryBlue,
+                    perform: { shiftSchedule(by: -1800) }
+                ))
+                actions.append(QuickActionItem(
+                    title: isRussian ? "+30 мин" : "+30 min",
+                    icon: "clock.arrow.circlepath",
+                    tint: DesignSystem.Colors.primaryBlue,
+                    perform: { shiftSchedule(by: 1800) }
+                ))
             }
-            .buttonStyle(.bordered)
-        } else if let handler = onOpenEventEditor, supportsEventEditor {
-            Button {
-                handler(action)
-            } label: {
-                Label(L10n.AIInline.openEventEditor, systemImage: "calendar")
-                    .font(.caption)
+            actions.append(QuickActionItem(
+                title: isRussian ? "Завтра" : "Tomorrow",
+                icon: "calendar.badge.plus",
+                tint: DesignSystem.Colors.primaryTeal,
+                perform: { moveSchedule(days: 1) }
+            ))
+
+            if !editedIsAllDay {
+                actions.append(QuickActionItem(
+                    title: isRussian ? "Весь день" : "All-day",
+                    icon: "sun.max",
+                    tint: DesignSystem.Colors.priorityMedium,
+                    perform: { setAllDay(true) }
+                ))
+            } else {
+                actions.append(QuickActionItem(
+                    title: isRussian ? "Время" : "Timed",
+                    icon: "clock",
+                    tint: DesignSystem.Colors.textSecondary,
+                    perform: { setAllDay(false) }
+                ))
             }
-            .buttonStyle(.bordered)
         }
+
+        if action.type == .createTask || action.type == .updateTask {
+            actions.append(contentsOf: quickPriorityActions())
+        }
+
+        return actions
+    }
+
+    private var durationMinutesFromPayload: Int? {
+        if let intValue = action.payload["estimated_duration"] as? Int { return intValue }
+        if let doubleValue = action.payload["estimated_duration"] as? Double { return Int(doubleValue) }
+        return nil
     }
 
     private var otherItems: [PreviewItem] {
@@ -251,14 +473,69 @@ struct AIActionInlineCard: View {
         }
     }
 
+    private var borderColor: Color { actionColor.opacity(0.18) }
+
+    private var actionTypeLabel: String {
+        switch action.type {
+        case .createTask: return L10n.AIActionText.createTaskTitle
+        case .updateTask: return L10n.AIActionText.updateTaskTitle
+        case .deleteTask: return L10n.AIActionText.deleteTaskTitle
+        case .createEvent: return L10n.AIActionText.createEventTitle
+        case .updateEvent: return L10n.AIActionText.updateEventTitle
+        case .deleteEvent: return L10n.AIActionText.deleteEventTitle
+        case .suggestTimeSlots: return L10n.AIActionText.scheduleTaskTitle
+        case .prioritizeTasks: return "AI Prioritization"
+        case .requestClarification: return L10n.AIActionText.clarificationTitle
+        case .showError: return "AI Error"
+        }
+    }
+
+    private var confidenceBadge: some View {
+        let percent = Int((action.confidence * 100).rounded())
+        return Label("\(percent)%", systemImage: "sparkles")
+            .font(.caption2.weight(.semibold))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(actionColor.opacity(0.16))
+            )
+            .foregroundStyle(actionColor)
+    }
+
+    @ViewBuilder
+    private var confirmationBadge: some View {
+        if action.requiresConfirmation {
+            Label(isRussian ? "Нужно подтвердить" : "Needs review", systemImage: "hand.raised")
+                .font(.caption2.weight(.semibold))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.orange.opacity(0.16))
+                )
+                .foregroundStyle(Color.orange)
+        } else {
+            Label(isRussian ? "Авто" : "Auto", systemImage: "bolt.fill")
+                .font(.caption2.weight(.semibold))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.green.opacity(0.18))
+                )
+                .foregroundStyle(Color.green)
+        }
+    }
+
     private var actionColor: Color {
         switch action.type {
-        case .createTask, .createEvent: return .green
-        case .updateTask, .updateEvent: return .blue
-        case .deleteTask, .deleteEvent: return .red
-        case .suggestTimeSlots, .prioritizeTasks: return .blue
-        case .requestClarification: return .orange
-        case .showError: return .red
+        case .createTask, .createEvent: return DesignSystem.Colors.primaryTeal
+        case .updateTask, .updateEvent: return DesignSystem.Colors.primaryBlue
+        case .deleteTask, .deleteEvent: return DesignSystem.Colors.priorityHigh
+        case .suggestTimeSlots, .prioritizeTasks: return DesignSystem.Colors.primaryBlue
+        case .requestClarification: return Color.orange
+        case .showError: return Color.red
         }
     }
 
@@ -327,6 +604,8 @@ struct AIActionInlineCard: View {
             }
         )
     }
+
+    // MARK: - Sync helpers
 
     private func seedFromAction() {
         isSyncingFromAction = true
@@ -423,6 +702,65 @@ struct AIActionInlineCard: View {
         syncPayload()
     }
 
+    private func shiftSchedule(by interval: TimeInterval) {
+        guard let start = editedStart else { return }
+        let newStart = start.addingTimeInterval(interval)
+        editedStart = newStart
+        if let end = editedEnd {
+            editedEnd = end.addingTimeInterval(interval)
+        } else {
+            editedEnd = newStart.addingTimeInterval(defaultDuration)
+        }
+        editedIsAllDay = false
+        syncPayload()
+    }
+
+    private func moveSchedule(days: Int) {
+        guard let start = editedStart else { return }
+        let calendar = Calendar.current
+        if editedIsAllDay {
+            if let shifted = calendar.date(byAdding: .day, value: days, to: start) {
+                editedStart = calendar.startOfDay(for: shifted)
+                editedEnd = calendar.date(byAdding: .day, value: 1, to: editedStart ?? shifted)
+            }
+        } else {
+            let interval = TimeInterval(days * 86400)
+            editedStart = start.addingTimeInterval(interval)
+            if let end = editedEnd {
+                editedEnd = end.addingTimeInterval(interval)
+            }
+        }
+        syncPayload()
+    }
+
+    private func setAllDay(_ value: Bool) {
+        guard editedStart != nil else { return }
+        editedIsAllDay = value
+        adjustForAllDayChange()
+    }
+
+    private func quickPriorityActions() -> [QuickActionItem] {
+        let titles: [(Int, String, Color)] = [
+            (3, isRussian ? "Высокий" : "High", DesignSystem.Colors.priorityHigh),
+            (2, isRussian ? "Средний" : "Medium", DesignSystem.Colors.priorityMedium),
+            (1, isRussian ? "Низкий" : "Low", DesignSystem.Colors.priorityLow)
+        ]
+
+        return titles.map { value, title, tint in
+            QuickActionItem(
+                title: title,
+                icon: "flag.fill",
+                tint: tint,
+                perform: {
+                    editedPriority = value
+                    syncPayload()
+                }
+            )
+        }
+    }
+
+    // MARK: - Formatting helpers
+
     private func displayKey(_ key: String) -> String {
         key.replacingOccurrences(of: "_", with: " ").capitalized
     }
@@ -468,6 +806,15 @@ struct AIActionInlineCard: View {
         }
     }
 
+    private func priorityTint(for value: Int) -> Color {
+        switch value {
+        case 3: return DesignSystem.Colors.priorityHigh
+        case 2: return DesignSystem.Colors.priorityMedium
+        case 1: return DesignSystem.Colors.priorityLow
+        default: return DesignSystem.Colors.priorityNone
+        }
+    }
+
     private func roundedDate(_ date: Date) -> Date {
         let calendar = Calendar.current
         let components = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: date)
@@ -477,6 +824,52 @@ struct AIActionInlineCard: View {
         }
         return date
     }
+
+    private func formattedDuration(minutes: Int) -> String {
+        if minutes <= 0 { return isRussian ? "Без длительности" : "No duration" }
+        if minutes % 60 == 0 {
+            let hours = minutes / 60
+            let unit = isRussian ? "ч" : "h"
+            return "\(hours) \(unit)"
+        }
+        let hours = minutes / 60
+        let mins = minutes % 60
+        if hours > 0 {
+            if isRussian {
+                return "\(hours) ч \(mins) мин"
+            } else {
+                return "\(hours)h \(mins)m"
+            }
+        }
+        if isRussian {
+            return "\(mins) мин"
+        }
+        return "\(mins)m"
+    }
+
+    private func durationText(from start: Date, to end: Date, fallbackTime: String) -> String {
+        let minutes = Int(end.timeIntervalSince(start) / 60)
+        if minutes <= 0 { return fallbackTime }
+        return formattedDuration(minutes: minutes)
+    }
+
+    private var isRussian: Bool {
+        Locale.preferredLanguages.first?.lowercased().hasPrefix("ru") ?? Locale.current.identifier.lowercased().hasPrefix("ru")
+    }
+
+    private static let timeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale.autoupdatingCurrent
+        formatter.dateFormat = "HH:mm"
+        return formatter
+    }()
+
+    private static let dayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale.autoupdatingCurrent
+        formatter.dateFormat = "d MMMM"
+        return formatter
+    }()
 }
 
 private struct PreviewItem: Identifiable {
@@ -484,4 +877,19 @@ private struct PreviewItem: Identifiable {
     let key: String
     let title: String
     let value: String
+}
+
+private struct InlineChip: Identifiable {
+    let id = UUID()
+    let icon: String
+    let text: String
+    let tint: Color
+}
+
+private struct QuickActionItem: Identifiable {
+    let id = UUID()
+    let title: String
+    let icon: String
+    let tint: Color
+    let perform: () -> Void
 }

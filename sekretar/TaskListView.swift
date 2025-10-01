@@ -14,6 +14,9 @@ struct TaskListView: View {
     @State private var showEditor = false
     @State private var selectedTaskID: NSManagedObjectID?
     @FocusState private var quickFieldFocused: Bool
+    @State private var highlightedTaskID: NSManagedObjectID?
+    @State private var highlightAlpha: Double = 0
+    @State private var highlightResetTask: Task<Void, Never>?
 
     @FetchRequest private var tasks: FetchedResults<TaskEntity>
     // Без режима множественного редактирования
@@ -53,10 +56,14 @@ struct TaskListView: View {
             .onDisappear {
                 quickFieldFocused = false
                 dismissKeyboard()
+                highlightResetTask?.cancel()
             }
             .onReceive(NotificationCenter.default.publisher(for: .dismissKeyboard)) { _ in
                 quickFieldFocused = false
                 dismissKeyboard()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .highlightTaskItem)) { note in
+                handleHighlight(note: note)
             }
             .sheet(isPresented: $showingNewTask, onDismiss: { draftTask = nil }) {
                 if let task = draftTask {
@@ -123,7 +130,10 @@ struct TaskListView: View {
     }
     
     private func taskRow(for task: TaskEntity, onEdit: @escaping () -> Void = {}) -> some View {
-        HStack(spacing: 12) {
+        let isHighlighted = highlightedTaskID == task.objectID
+        let alpha = isHighlighted ? highlightAlpha : 0
+
+        return HStack(spacing: 12) {
             Button(action: { Task { await viewModel.toggle(task) } }) {
                 Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
             }.buttonStyle(.plain)
@@ -153,6 +163,17 @@ struct TaskListView: View {
             }
             .buttonStyle(.plain)
         }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.yellow.opacity(alpha * 0.08))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color.yellow.opacity(alpha), lineWidth: alpha > 0 ? 2 : 0)
+        )
+        .contentShape(Rectangle())
     }
     
     private func addTask() {
@@ -189,5 +210,28 @@ struct TaskListView: View {
         #if canImport(UIKit)
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
         #endif
+    }
+    
+    private func handleHighlight(note: Notification) {
+        if let id = note.userInfo?["id"] as? NSManagedObjectID {
+            triggerHighlight(for: id)
+        }
+    }
+    
+    private func triggerHighlight(for id: NSManagedObjectID) {
+        highlightedTaskID = id
+        highlightResetTask?.cancel()
+        highlightAlpha = 1
+        withAnimation(.easeOut(duration: 1.4)) {
+            highlightAlpha = 0
+        }
+        highlightResetTask = Task { [id] in
+            try? await Task.sleep(nanoseconds: 2_500_000_000)
+            await MainActor.run {
+                if highlightedTaskID == id {
+                    highlightedTaskID = nil
+                }
+            }
+        }
     }
 }

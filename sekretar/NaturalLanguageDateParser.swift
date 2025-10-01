@@ -26,6 +26,7 @@ struct NaturalLanguageDateParser {
     ]
 
     private static let wordNumberMap: [String: Int] = [
+        "ноль": 0, "zero": 0,
         "один": 1, "одна": 1, "одну": 1, "одно": 1, "one": 1,
         "два": 2, "две": 2, "two": 2, "пару": 2, "couple": 2,
         "три": 3, "three": 3, "несколько": 3, "few": 3,
@@ -35,7 +36,20 @@ struct NaturalLanguageDateParser {
         "семь": 7, "seven": 7,
         "восемь": 8, "eight": 8,
         "девять": 9, "nine": 9,
-        "десять": 10, "ten": 10
+        "десять": 10, "ten": 10,
+        "одиннадцать": 11, "одиннадц": 11, "eleven": 11,
+        "двенадцать": 12, "двенадц": 12, "twelve": 12,
+        "тринадцать": 13, "thirteen": 13,
+        "четырнадцать": 14, "fourteen": 14,
+        "пятнадцать": 15, "пятнадц": 15, "fifteen": 15, "четверть": 15, "quarter": 15,
+        "шестнадцать": 16, "шестнадц": 16, "sixteen": 16,
+        "семнадцать": 17, "семнадц": 17, "seventeen": 17,
+        "восемнадцать": 18, "восемнадц": 18, "eighteen": 18,
+        "девятнадцать": 19, "девятнадц": 19, "nineteen": 19,
+        "двадцать": 20, "twenty": 20,
+        "тридцать": 30, "thirty": 30, "пол": 30, "половина": 30, "half": 30,
+        "сорок": 40, "forty": 40,
+        "пятьдесят": 50, "fifty": 50
     ]
 
     private static let allDayKeywords: [String] = [
@@ -151,7 +165,12 @@ struct NaturalLanguageDateParser {
             return DateTimeParsingResult(start: approx, end: approx.addingTimeInterval(duration), isAllDay: false)
         }
 
-        if !matchedDay && !matchedTime { return nil }
+        if !matchedDay && !matchedTime {
+            if let detectorResult = parseUsingDataDetector(in: trimmed, reference: reference) {
+                return detectorResult
+            }
+            return nil
+        }
 
         if !isAllDay && !matchedTime {
             // We know the date but no time — treat as all-day by default
@@ -400,6 +419,88 @@ private extension NaturalLanguageDateParser {
             return calendar.date(bySettingHour: adjustedHour, minute: minute, second: 0, of: baseDay)
         }
 
+        if let wordBased = parseWordBasedSingleTime(in: text, baseDay: baseDay, periodHint: periodHint) {
+            return wordBased
+        }
+
+        return nil
+    }
+
+    func parseWordBasedSingleTime(in text: String, baseDay: Date, periodHint: DayPeriod?) -> Date? {
+        let tokens = tokenize(text)
+        guard !tokens.isEmpty else { return nil }
+        let prepositions: Set<String> = ["в", "во", "к", "на", "at", "по"]
+
+        var index = 0
+        while index < tokens.count {
+            let token = tokens[index]
+            if !prepositions.contains(token) {
+                index += 1
+                continue
+            }
+
+            let hourIndex = index + 1
+            guard hourIndex < tokens.count else { break }
+            let hourToken = tokens[hourIndex]
+            var hourValue: Int?
+
+            // Handle compounds like "двадцать" "два"
+            if hourToken == "двадцать" || hourToken == "twenty" {
+                let nextIndex = hourIndex + 1
+                if nextIndex < tokens.count, let nextValue = Self.wordNumberMap[tokens[nextIndex]] {
+                    hourValue = 20 + nextValue
+                    index = nextIndex
+                } else {
+                    hourValue = 20
+                }
+            } else if let mapped = Self.wordNumberMap[hourToken] {
+                hourValue = mapped
+            }
+
+            guard var hour = hourValue else {
+                index += 1
+                continue
+            }
+
+            var minute = 0
+            var cursor = index + 2
+            if cursor < tokens.count {
+                let potentialMinute = tokens[cursor]
+                if let mappedMinute = Self.wordNumberMap[potentialMinute], mappedMinute < 60 {
+                    minute = mappedMinute
+                    cursor += 1
+                } else if potentialMinute == "тридцать" || potentialMinute == "thirty" {
+                    minute = 30
+                    cursor += 1
+                } else if potentialMinute == "сорок" || potentialMinute == "forty" {
+                    minute = 40
+                    cursor += 1
+                    if cursor < tokens.count, let extra = Self.wordNumberMap[tokens[cursor]], extra < 10 {
+                        minute += extra
+                        cursor += 1
+                    }
+                } else if potentialMinute == "пятнадцать" || potentialMinute == "quarter" || potentialMinute == "четверть" {
+                    minute = 15
+                    cursor += 1
+                } else if potentialMinute == "пол" || potentialMinute == "половина" || potentialMinute == "half" {
+                    minute = 30
+                    cursor += 1
+                }
+            }
+
+            var suffix: String?
+            if cursor < tokens.count {
+                suffix = tokens[cursor]
+            }
+
+            hour = interpretHour(hour, suffix: suffix, fallback: nil, hint: periodHint)
+            if let date = calendar.date(bySettingHour: hour, minute: minute, second: 0, of: baseDay) {
+                return date
+            }
+
+            index = cursor
+        }
+
         return nil
     }
 
@@ -461,6 +562,35 @@ private extension NaturalLanguageDateParser {
         if text.contains("for an hour and a half") { return 1.5 * 3600 }
         if text.contains("for half an hour") { return 0.5 * 3600 }
         return nil
+    }
+
+    func parseUsingDataDetector(in text: String, reference: Date) -> DateTimeParsingResult? {
+        guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.date.rawValue) else { return nil }
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        let matches = detector.matches(in: text, options: [], range: range)
+        guard let match = matches.sorted(by: { $0.range.location < $1.range.location }).first, let detectedDate = match.date else {
+            return nil
+        }
+
+        var start = detectedDate
+        if let timeZone = match.timeZone {
+            let delta = TimeInterval(timeZone.secondsFromGMT(for: detectedDate) - TimeZone.current.secondsFromGMT(for: detectedDate))
+            if abs(delta) > 1 { start = start.addingTimeInterval(delta) }
+        }
+
+        let explicit = parseExplicitDuration(in: text)
+        let duration = match.duration > 0 ? match.duration : (explicit ?? 3600)
+        var end = start.addingTimeInterval(duration)
+        var isAllDay = false
+
+        if duration >= 20 * 3600 || (!text.contains(":") && !text.contains(".") && !text.lowercased().contains("am") && !text.lowercased().contains("pm")) {
+            let dayStart = calendar.startOfDay(for: start)
+            start = dayStart
+            end = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart.addingTimeInterval(86400)
+            isAllDay = true
+        }
+
+        return DateTimeParsingResult(start: start, end: end, isAllDay: isAllDay)
     }
 
     func interpretHour(_ hour: Int, suffix: String?, fallback: String?, hint: DayPeriod?) -> Int {

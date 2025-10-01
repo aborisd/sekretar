@@ -295,20 +295,26 @@ struct TaskEditorView: View {
     
     private func save() {
         guard canSave else { return }
-        
+
         withAnimation(DesignSystem.Animation.standard) {
             isSaving = true
         }
-        
+
         task.title = title.trimmingCharacters(in: .whitespacesAndNewlines)
         task.notes = notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : notes.trimmingCharacters(in: .whitespacesAndNewlines)
         task.priority = Int16(priority)
         task.dueDate = hasDue ? dueDate : nil
         // task.project disabled
         task.updatedAt = Date()
-        
+
         do {
-            try context.save()
+            // Measure entity creation performance (BRD: < 300ms)
+            let _ = PerformanceMonitor.shared.measureSync(
+                operation: "Save Task",
+                category: .entityCreation
+            ) {
+                try? context.save()
+            }
             
             Task {
                 if hasDue, let dueDate = dueDate {

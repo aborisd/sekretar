@@ -1,18 +1,33 @@
 import SwiftUI
 import CoreData
+import Combine
 
 // MARK: - ViewModel
 @MainActor
 final class ChatViewModel: ObservableObject {
     @Published var messages: [ChatMessage] = [
-        ChatMessage(author: .assistant, text: "Привет! Я помогу спланировать день.")
+        ChatMessage(author: .assistant, text: "Привет! Готов помочь с планами.")
     ]
     @Published var input: String = ""
     @Published var typing: Bool = false
-    @Published var isAIEnabled: Bool = false
+    @Published var isAIEnabled: Bool
 
-    private let ai = AIIntentService.shared
+    private let ai: AIIntentService
     var currentTask: Task<Void, Never>? = nil
+    private var cancellables: Set<AnyCancellable> = []
+
+    init(service: AIIntentService? = nil) {
+        let resolvedService = service ?? AIIntentService.shared
+        self.ai = resolvedService
+        self._isAIEnabled = Published(initialValue: resolvedService.isChatLLMEnabled)
+
+        resolvedService.$isChatLLMEnabled
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] enabled in
+                self?.isAIEnabled = enabled
+            }
+            .store(in: &cancellables)
+    }
 
     func send() {
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -29,20 +44,8 @@ final class ChatViewModel: ObservableObject {
                 self.currentTask = nil
             }
 
-            if self.isAIEnabled {
-                do {
-                    let reply = try await self.ai.chatResponse(for: trimmed)
-                    guard !Task.isCancelled else { return }
-                    self.messages.append(ChatMessage(author: .assistant, text: reply))
-                } catch {
-                    guard !Task.isCancelled else { return }
-                    self.messages.append(ChatMessage(author: .system, text: "Не удалось получить ответ от ИИ."))
-                }
-            }
-
-            if !Task.isCancelled {
-                await self.ai.processUserInput(trimmed)
-            }
+            await self.ai.processUserInput(trimmed)
+            self.handleAIResult(input: trimmed)
         }
     }
 
@@ -53,10 +56,153 @@ final class ChatViewModel: ObservableObject {
     }
 
     func toggleAIMode() {
-        isAIEnabled.toggle()
-        let status = isAIEnabled ? "ИИ-режим включен" : "ИИ-режим выключен"
+        let newValue = !ai.isChatLLMEnabled
+        ai.setChatLLMEnabled(newValue)
+        let status = newValue ? "ИИ включен" : "ИИ выключен"
         messages.append(ChatMessage(author: .system, text: status, style: .banner))
     }
+
+    private func handleAIResult(input: String) {
+        guard let action = ai.pendingAction else { return }
+
+        switch action.type {
+        case .requestClarification:
+            if let answer = action.payload["answer"] as? String {
+                let condensed = condensedAnswer(answer)
+                messages.append(ChatMessage(author: .assistant, text: condensed))
+                ai.cancelPendingAction()
+            }
+        case .createTask, .updateTask:
+            if let summary = summary(for: action, kind: .task) {
+                messages.append(ChatMessage(author: .assistant, text: summary))
+            }
+        case .createEvent, .updateEvent:
+            if let summary = summary(for: action, kind: .event) {
+                messages.append(ChatMessage(author: .assistant, text: summary))
+            }
+        case .deleteTask:
+            messages.append(ChatMessage(author: .assistant, text: "Удалю задачу — сверимся перед подтверждением."))
+        case .deleteEvent:
+            messages.append(ChatMessage(author: .assistant, text: "Удалю событие — могу подтвердить, когда будешь готов."))
+        case .suggestTimeSlots, .prioritizeTasks:
+            if !action.description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                messages.append(ChatMessage(author: .assistant, text: action.description))
+            }
+        default:
+            break
+        }
+    }
+
+    private enum SummaryKind { case task, event }
+
+    private func summary(for action: AIAction, kind: SummaryKind) -> String? {
+        let payload = action.payload
+        let rawTitle = (payload["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let title = rawTitle, !title.isEmpty else { return nil }
+
+        let start = payload["start"] as? Date
+        let end = payload["end"] as? Date
+        let isAllDay = payload["is_all_day"] as? Bool ?? false
+
+        var lines: [String] = []
+        switch kind {
+        case .task:
+            lines.append("Задача «\(title)»")
+        case .event:
+            lines.append("Событие «\(title)»")
+        }
+
+        var details: [String] = []
+        if let schedule = scheduleSummary(start: start, end: end, isAllDay: isAllDay) {
+            details.append(schedule)
+        }
+        if let priority = prioritySummary(from: payload) {
+            details.append("приоритет: \(priority)")
+        }
+        if kind == .event, let location = payload["location"] as? String, !location.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            details.append(location.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+
+        if !details.isEmpty {
+            lines.append(details.joined(separator: " • "))
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    private func scheduleSummary(start: Date?, end: Date?, isAllDay: Bool) -> String? {
+        guard let start else { return nil }
+        let calendar = Calendar.current
+        let dayLabel: String
+        if calendar.isDateInToday(start) {
+            dayLabel = "сегодня"
+        } else if calendar.isDateInTomorrow(start) {
+            dayLabel = "завтра"
+        } else {
+            dayLabel = Self.dayFormatter.string(from: start)
+        }
+
+        if isAllDay {
+            return "\(dayLabel), весь день"
+        }
+
+        let startTime = Self.timeFormatter.string(from: start)
+        let resolvedEnd: Date
+        if let end, end > start {
+            resolvedEnd = end
+        } else {
+            resolvedEnd = start.addingTimeInterval(3600)
+        }
+        let endTime = Self.timeFormatter.string(from: resolvedEnd)
+        return "\(dayLabel), \(startTime)–\(endTime)"
+    }
+
+    private func prioritySummary(from payload: [String: Any]) -> String? {
+        if let number = payload["priority"] as? NSNumber {
+            return priorityLabel(for: number.intValue)
+        }
+        if let value = payload["priority"] as? Int {
+            return priorityLabel(for: value)
+        }
+        return nil
+    }
+
+    private func priorityLabel(for value: Int) -> String? {
+        switch value {
+        case 3: return "высокий"
+        case 2: return "средний"
+        case 1: return "низкий"
+        default: return nil
+        }
+    }
+
+    private func condensedAnswer(_ answer: String) -> String {
+        let lines = answer
+            .components(separatedBy: CharacterSet.newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        let joined = lines.joined(separator: "\n")
+        let trimmed = joined.trimmingCharacters(in: .whitespacesAndNewlines)
+        let limit = 480
+        if trimmed.count > limit {
+            let index = trimmed.index(trimmed.startIndex, offsetBy: limit)
+            return String(trimmed[..<index]).trimmingCharacters(in: .whitespacesAndNewlines) + "…"
+        }
+        return trimmed
+    }
+
+    private static let dayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ru_RU")
+        formatter.dateFormat = "d MMMM"
+        return formatter
+    }()
+
+    private static let timeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ru_RU")
+        formatter.dateFormat = "HH:mm"
+        return formatter
+    }()
 }
 
 // MARK: - Compact Bubble
@@ -187,7 +333,7 @@ struct ChatScreen: View {
                         }
                     }
                 }
-                .background(Color(white: 0.96))
+                .background(DesignSystem.Colors.background)
             }
 
             Divider()
@@ -199,12 +345,12 @@ struct ChatScreen: View {
                     .padding(.vertical, 8)
                     .padding(.horizontal, 12)
                     .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(DesignSystem.Colors.cardBackground)
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(DesignSystem.Colors.cardBackground)
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .stroke(Color.black.opacity(0.08))
+                            .stroke(DesignSystem.Colors.textTertiary.opacity(0.12))
                     )
                     .lineLimit(1...5)
 
@@ -214,7 +360,7 @@ struct ChatScreen: View {
                             .font(.system(size: 16, weight: .semibold))
                     }
                     .buttonStyle(.borderedProminent)
-                    .tint(.red)
+                    .tint(Color.red.opacity(0.85))
                 } else {
                     Button(action: { 
                         vm.currentTask?.cancel()
@@ -237,6 +383,7 @@ struct ChatScreen: View {
                             .font(.system(size: 16, weight: .semibold))
                     }
                     .buttonStyle(.bordered)
+                    .tint(DesignSystem.Colors.primaryTeal)
                     .disabled(ai.isProcessing)
                 }
 
@@ -264,12 +411,12 @@ struct ChatScreen: View {
                         .font(.system(size: 16, weight: .semibold))
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(.blue)
+                .tint(DesignSystem.Colors.primaryTeal)
                 .disabled(vm.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || ai.isProcessing)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background(Color(white: 0.96))
+            .background(DesignSystem.Colors.background)
         }
         .navigationTitle("Чат")
 #if os(iOS)
@@ -279,11 +426,11 @@ struct ChatScreen: View {
                     Image(systemName: "brain.head.profile")
                         .symbolRenderingMode(.hierarchical)
                         .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(vm.isAIEnabled ? .white : .blue)
+                        .foregroundColor(vm.isAIEnabled ? .white : DesignSystem.Colors.primaryTeal)
                         .padding(8)
                         .background(
                             Circle()
-                                .fill(vm.isAIEnabled ? Color.blue : Color.blue.opacity(0.12))
+                                .fill(vm.isAIEnabled ? DesignSystem.Colors.primaryTeal : DesignSystem.Colors.primaryTeal.opacity(0.12))
                         )
                 }
                 .accessibilityLabel(vm.isAIEnabled ? "Отключить ИИ" : "Включить ИИ")
@@ -361,7 +508,8 @@ struct ChatScreen: View {
         }
         .onChange(of: ai.lastResultToast) { toast in
             if let toast, !toast.isEmpty {
-                vm.messages.append(ChatMessage(author: .assistant, text: toast, style: .bubble))
+                vm.messages.append(ChatMessage(author: .assistant, text: toast))
+                ai.lastResultToast = nil
             }
         }
     }
@@ -588,23 +736,35 @@ private struct AssistantTipCard: View {
     let message: ChatMessage
     @State private var isExpanded = false
 
+    private var headerLabel: String {
+        let preferred = Locale.preferredLanguages.first?.lowercased() ?? "ru"
+        if preferred.hasPrefix("ru") { return "Ассистент" }
+        return "Assistant"
+    }
+
     private var title: String {
-        if let first = lines.first, first.count <= 80 {
-            return first
+        guard let first = lines.first?.trimmingCharacters(in: .whitespacesAndNewlines), !first.isEmpty else {
+            return headerLabel
         }
-        return "Совет ассистента"
+        return first.count <= 80 ? first : headerLabel
     }
 
     private var details: [String] {
         var remainder = lines
-        if !remainder.isEmpty && remainder.first == title { remainder.removeFirst() }
+        if let first = remainder.first, first.caseInsensitiveCompare(title) == .orderedSame {
+            remainder.removeFirst()
+        }
         return remainder
     }
 
     private var lines: [String] {
         message.text
             .components(separatedBy: CharacterSet.newlines)
-            .flatMap { $0.split(separator: "•").map(String.init) }
+            .flatMap { segment -> [String] in
+                segment
+                    .split(separator: "•", omittingEmptySubsequences: true)
+                    .map { String($0) }
+            }
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
     }
@@ -616,6 +776,9 @@ private struct AssistantTipCard: View {
             endPoint: .bottomTrailing
         )
     }
+
+    private var hasDetails: Bool { !details.isEmpty }
+    private var showTitleLine: Bool { hasDetails && title.caseInsensitiveCompare(headerLabel) != .orderedSame }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -629,28 +792,30 @@ private struct AssistantTipCard: View {
                             .fill(Color.white.opacity(0.16))
                     )
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Совет ассистента")
+                    Text(headerLabel)
                         .font(.caption)
                         .foregroundStyle(Color.white.opacity(0.7))
                         .textCase(.uppercase)
-                    Text(title)
-                        .font(.headline)
-                        .foregroundStyle(Color.white)
-                        .fixedSize(horizontal: false, vertical: true)
+                    if showTitleLine {
+                        Text(title)
+                            .font(.headline)
+                            .foregroundStyle(Color.white)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 Spacer(minLength: 0)
-                Button {
-                    withAnimation(DesignSystem.Animation.standard) { isExpanded.toggle() }
-                } label: {
-                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                        .foregroundStyle(Color.white.opacity(0.8))
+                if hasDetails {
+                    Button {
+                        withAnimation(DesignSystem.Animation.standard) { isExpanded.toggle() }
+                    } label: {
+                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                            .foregroundStyle(Color.white.opacity(0.8))
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
-                .opacity(details.isEmpty ? 0 : 1)
-                .disabled(details.isEmpty)
             }
 
-            if !details.isEmpty {
+            if hasDetails {
                 VStack(alignment: .leading, spacing: 8) {
                     ForEach(detailLines, id: \.self) { line in
                         HStack(alignment: .top, spacing: 8) {
@@ -667,7 +832,7 @@ private struct AssistantTipCard: View {
                 }
                 .transition(.opacity.combined(with: .move(edge: .top)))
             } else {
-                Text(message.text)
+                Text(cleanedText)
                     .font(.subheadline)
                     .foregroundStyle(Color.white.opacity(0.92))
                     .fixedSize(horizontal: false, vertical: true)
@@ -700,6 +865,18 @@ private struct AssistantTipCard: View {
             return details
         }
         return Array(details.prefix(2))
+    }
+
+    private var cleanedText: String {
+        let trimmed = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "" }
+        if lines.isEmpty { return trimmed }
+        var relevant = lines
+        if let first = relevant.first, first.caseInsensitiveCompare(headerLabel) == .orderedSame {
+            relevant.removeFirst()
+        }
+        guard !relevant.isEmpty else { return trimmed }
+        return relevant.joined(separator: "\n")
     }
 }
 

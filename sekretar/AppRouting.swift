@@ -9,6 +9,8 @@ extension Notification.Name {
     static let focusCalendarDate = Notification.Name("SekretarFocusCalendarDate")
     static let dismissKeyboard = Notification.Name("SekretarDismissKeyboard")
     static let aiDidApplyAction = Notification.Name("SekretarAIDidApplyAction")
+    static let highlightCalendarItem = Notification.Name("SekretarHighlightCalendarItem")
+    static let highlightTaskItem = Notification.Name("SekretarHighlightTaskItem")
 }
 
 struct OpenLink: Identifiable, Equatable {

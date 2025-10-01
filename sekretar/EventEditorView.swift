@@ -224,7 +224,13 @@ struct EventEditorView: View {
         event.id = event.id ?? UUID()
 
         do {
-            try context.save()
+            // Measure entity creation performance (BRD: < 300ms)
+            let _ = PerformanceMonitor.shared.measureSync(
+                operation: "Save Event",
+                category: .entityCreation
+            ) {
+                try? context.save()
+            }
             Task { try? await EventKitService(context: context).syncToEventKit(event) }
 #if canImport(UIKit)
             notify(.success)

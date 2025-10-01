@@ -31,7 +31,7 @@ struct ChatMessage: Identifiable, Hashable {
 
     private static func defaultStyle(for author: Author) -> Style {
         switch author {
-        case .assistant: return .assistantCard
+        case .assistant: return .bubble
         case .system: return .banner
         case .user: return .bubble
         }

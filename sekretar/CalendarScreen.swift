@@ -5,6 +5,8 @@ struct CalendarScreen: View {
     @Environment(\.managedObjectContext) private var context
     @StateObject private var viewModel: CalendarViewModel
     @State private var presentedDetail: CalendarDetail?
+    @State private var highlightedTimelineItem: NSManagedObjectID?
+    @State private var highlightResetTask: Task<Void, Never>?
 
     private struct ModeOption: Identifiable {
         let id: CalendarViewMode
@@ -79,6 +81,10 @@ struct CalendarScreen: View {
                     viewModel.selectDate(date)
                 }
             }
+            .onReceive(NotificationCenter.default.publisher(for: .highlightCalendarItem)) { note in
+                handleHighlightNotification(note)
+            }
+            .onDisappear { highlightResetTask?.cancel() }
             .sheet(item: $presentedDetail) { detail in
                 switch detail {
                 case .event(let event):
@@ -95,6 +101,28 @@ struct CalendarScreen: View {
 
 // MARK: - Subviews
 private extension CalendarScreen {
+    func handleHighlightNotification(_ note: Notification) {
+        if let date = note.userInfo?["date"] as? Date {
+            viewModel.selectDate(date)
+        }
+        if let id = note.userInfo?["id"] as? NSManagedObjectID {
+            triggerHighlight(for: id)
+        }
+    }
+
+    func triggerHighlight(for id: NSManagedObjectID) {
+        highlightedTimelineItem = id
+        highlightResetTask?.cancel()
+        highlightResetTask = Task {
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            await MainActor.run {
+                if highlightedTimelineItem == id {
+                    highlightedTimelineItem = nil
+                }
+            }
+        }
+    }
+
     var modePicker: some View {
         Picker("", selection: viewModeBinding) {
             ForEach(modeOptions) { option in
@@ -233,6 +261,7 @@ private extension CalendarScreen {
             date: viewModel.selectedDate,
             events: viewModel.eventsFor(date: viewModel.selectedDate),
             tasks: viewModel.tasksFor(date: viewModel.selectedDate),
+            highlightedID: highlightedTimelineItem,
             onSelectEvent: { presentedDetail = .event($0) },
             onSelectTask: { presentedDetail = .task($0) }
         )
@@ -339,15 +368,26 @@ private extension CalendarScreen {
     var agendaRow: AgendaRowBuilder { AgendaRowBuilder(timeFormatter: timeFormatter) }
 
     private func priorityIndicators(for date: Date) -> [Color] {
-        let tasks = viewModel.tasksFor(date: date)
-            .sorted { ($0.priority) > ($1.priority) }
+        var indicators: [Color] = []
 
-        if !tasks.isEmpty {
-            return tasks.prefix(3).map { priorityColor(for: $0.priority) }
+        let tasks = viewModel.tasksFor(date: date)
+        let priorityOrder: [Int16] = [3, 2, 1]
+
+        for priority in priorityOrder {
+            if tasks.contains(where: { $0.priority == priority }) {
+                indicators.append(priorityColor(for: priority))
+            }
         }
 
-        let hasEvents = !viewModel.eventsFor(date: date).isEmpty
-        return hasEvents ? [Color.blue] : []
+        if indicators.count < 3, tasks.contains(where: { $0.priority <= 0 }) {
+            indicators.append(priorityColor(for: 0))
+        }
+
+        if indicators.count < 3, !viewModel.eventsFor(date: date).isEmpty {
+            indicators.append(.blue)
+        }
+
+        return Array(indicators.prefix(3))
     }
 
     private func priorityColor(for priority: Int16) -> Color {
@@ -367,6 +407,7 @@ private struct DayTimelineView: View {
     let date: Date
     let events: [EventEntity]
     let tasks: [TaskEntity]
+    let highlightedID: NSManagedObjectID?
     let onSelectEvent: (EventEntity) -> Void
     let onSelectTask: (TaskEntity) -> Void
 
@@ -374,6 +415,7 @@ private struct DayTimelineView: View {
     private let minBlockHeight: CGFloat = 48
     private let columnSpacing: CGFloat = 8
     private let calendar = Calendar.current
+    @State private var highlightAlpha: Double = 0
 
     private static let timeFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -404,6 +446,8 @@ private struct DayTimelineView: View {
         )
         .shadow(color: Color.black.opacity(0.03), radius: 8, x: 0, y: 4)
         .animation(.spring(response: 0.45, dampingFraction: 0.85), value: layoutItems)
+        .onChange(of: highlightToken) { _ in updateHighlightAnimation() }
+        .onAppear { updateHighlightAnimation() }
     }
 
     private var allDayEvents: [EventEntity] {
@@ -428,6 +472,10 @@ private struct DayTimelineView: View {
         }
 
         return DayTimelineLayout().layout(inputs: eventInputs + taskInputs)
+    }
+
+    private var highlightToken: String {
+        highlightedID?.uriRepresentation().absoluteString ?? ""
     }
 
     private var timelineContent: some View {
@@ -646,18 +694,13 @@ private struct DayTimelineView: View {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .stroke(Color.white.opacity(0.25), lineWidth: 1)
         )
+        .overlay(highlightOverlay(for: layout.id))
         .shadow(color: DesignSystem.Colors.primaryBlue.opacity(0.25), radius: 8, x: 0, y: 4)
         .onTapGesture { onSelectEvent(event) }
     }
 
     private func taskBlock(_ task: TaskEntity, height: CGFloat) -> some View {
         let color = taskColor(for: task.priority)
-        let accent = LinearGradient(
-            colors: [color.opacity(0.18), color.opacity(0.06)],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-
         return VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
                 Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
@@ -668,15 +711,17 @@ private struct DayTimelineView: View {
                     .foregroundColor(DesignSystem.Colors.textPrimary)
                     .lineLimit(2)
                 Spacer(minLength: 0)
-                Text(priorityLabel(for: task.priority))
-                    .font(.caption2.bold())
-                    .foregroundColor(color)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(
-                        Capsule(style: .continuous)
-                            .fill(color.opacity(0.18))
-                    )
+                if task.priority > 0 {
+                    Text(priorityLabel(for: task.priority))
+                        .font(.caption2.bold())
+                        .foregroundColor(color)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(color.opacity(0.18))
+                        )
+                }
             }
 
             if let notes = task.notes, !notes.isEmpty {
@@ -697,14 +742,28 @@ private struct DayTimelineView: View {
         .frame(height: height, alignment: .topLeading)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(accent)
+                .fill(DesignSystem.Colors.cardBackground)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(color.opacity(0.25), lineWidth: 1)
+                .stroke(color.opacity(0.3), lineWidth: 1.2)
         )
-        .shadow(color: color.opacity(0.18), radius: 6, x: 0, y: 3)
+        .overlay(highlightOverlay(for: task.objectID))
+        .shadow(color: color.opacity(0.12), radius: 6, x: 0, y: 3)
         .onTapGesture { onSelectTask(task) }
+    }
+
+    private func highlightOverlay(for id: NSManagedObjectID) -> some View {
+        let opacity = highlightOpacity(for: id)
+        return RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .stroke(Color.yellow, lineWidth: 3)
+            .opacity(opacity)
+            .shadow(color: Color.yellow.opacity(opacity * 0.6), radius: opacity > 0 ? 12 : 0)
+    }
+
+    private func highlightOpacity(for id: NSManagedObjectID) -> Double {
+        guard let highlightedID else { return 0 }
+        return highlightedID == id ? highlightAlpha : 0
     }
 
     private func event(for id: NSManagedObjectID) -> EventEntity? {
@@ -765,6 +824,17 @@ private struct DayTimelineView: View {
         case 2: return 50 * 60
         case 1: return 35 * 60
         default: return 30 * 60
+        }
+    }
+
+    private func updateHighlightAnimation() {
+        guard highlightedID != nil else {
+            highlightAlpha = 0
+            return
+        }
+        highlightAlpha = 0.95
+        withAnimation(.easeOut(duration: 2.2)) {
+            highlightAlpha = 0
         }
     }
 
@@ -860,30 +930,27 @@ private struct AgendaRowBuilder {
     let timeFormatter: DateFormatter
 
     func eventRow(event: EventEntity) -> some View {
-        HStack(alignment: .top, spacing: 16) {
+        HStack(alignment: .center, spacing: 14) {
             if let start = event.startDate {
                 let end = event.endDate ?? start.addingTimeInterval(3600)
-                VStack(alignment: .trailing, spacing: 2) {
+                VStack(alignment: .trailing, spacing: 4) {
                     Text(timeFormatter.string(from: start))
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
+                        .font(.subheadline.weight(.semibold))
                     Text(timeFormatter.string(from: end))
                         .font(.caption2)
                         .foregroundColor(.secondary)
                 }
-                .frame(width: 64, alignment: .trailing)
-            } else {
-                Color.clear.frame(width: 64, height: 0)
+                .frame(width: 56, alignment: .trailing)
             }
 
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .center, spacing: 6) {
                     Image(systemName: "calendar")
                         .foregroundColor(.blue)
                     Text(event.title ?? "Событие")
-                        .font(.body)
-                        .fontWeight(.medium)
+                        .font(.body.weight(.medium))
                         .lineLimit(2)
+                        .multilineTextAlignment(.leading)
                 }
 
                 if event.isAllDay && event.startDate != nil {
@@ -897,33 +964,42 @@ private struct AgendaRowBuilder {
                         .lineLimit(2)
                 }
             }
-            Spacer()
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(14)
+        .padding(.vertical, 12)
+        .padding(.horizontal, 16)
         .background(DesignSystem.Colors.cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .shadow(color: Color.black.opacity(0.03), radius: 4, x: 0, y: 2)
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.black.opacity(0.04), lineWidth: 1)
+        )
     }
 
     func taskRow(task: TaskEntity) -> some View {
-        HStack(alignment: .top, spacing: 16) {
+        HStack(alignment: .center, spacing: 14) {
             if let due = task.dueDate {
-                Text(timeFormatter.string(from: due))
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                    .frame(width: 64, alignment: .trailing)
-            } else {
-                Color.clear.frame(width: 64, height: 0)
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text(timeFormatter.string(from: due))
+                        .font(.subheadline.weight(.semibold))
+                    if task.priority > 0 {
+                        Text("P\(task.priority)")
+                            .font(.caption2)
+                            .foregroundColor(DesignSystem.Colors.textSecondary)
+                    }
+                }
+                .frame(width: 56, alignment: .trailing)
             }
 
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .center, spacing: 6) {
                     Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
-                        .foregroundColor(task.isCompleted ? .green : .orange)
+                        .foregroundColor(task.isCompleted ? .green : DesignSystem.Colors.priorityMedium)
                     Text(task.title ?? "Задача")
-                        .font(.body)
-                        .fontWeight(.medium)
+                        .font(.body.weight(.medium))
                         .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                        .strikethrough(task.isCompleted, color: DesignSystem.Colors.textSecondary)
                 }
 
                 if let notes = task.notes, !notes.isEmpty {
@@ -933,12 +1009,16 @@ private struct AgendaRowBuilder {
                         .lineLimit(2)
                 }
             }
-            Spacer()
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(14)
+        .padding(.vertical, 12)
+        .padding(.horizontal, 16)
         .background(DesignSystem.Colors.cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .shadow(color: Color.black.opacity(0.03), radius: 4, x: 0, y: 2)
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.black.opacity(0.04), lineWidth: 1)
+        )
     }
 }
 

@@ -81,4 +81,25 @@ struct NaturalLanguageDateParserTests {
         #expect(delta == 3 * 3600)
         #expect(result!.end.timeIntervalSince(result!.start) == 1800)
     }
+
+    @Test func parsesSpelledOutTime() throws {
+        let parser = NaturalLanguageDateParser(calendar: calendar)
+        let reference = makeReference(day: 10, hour: 12)
+        let result = parser.parse("создай задачу на девять утра завтра", reference: reference)
+        #expect(result != nil)
+        let components = calendar.dateComponents([.day, .hour, .minute], from: result!.start)
+        #expect(components.day == 11)
+        #expect(components.hour == 9)
+        #expect(components.minute == 0)
+    }
+
+    @Test func parsesSpelledOutMinutes() throws {
+        let parser = NaturalLanguageDateParser(calendar: calendar)
+        let reference = makeReference(day: 5, hour: 14)
+        let result = parser.parse("забронируй звонок в семь тридцать вечера", reference: reference)
+        #expect(result != nil)
+        let components = calendar.dateComponents([.hour, .minute], from: result!.start)
+        #expect(components.hour == 19)
+        #expect(components.minute == 30)
+    }
 }
