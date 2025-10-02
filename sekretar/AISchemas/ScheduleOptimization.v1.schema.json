@@ -1,0 +1,148 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://sekretar.app/schemas/schedule-optimization/v1",
+  "title": "Schedule Optimization Response",
+  "description": "Schema for LLM schedule optimization responses",
+  "type": "object",
+  "required": ["items", "productivity_score"],
+  "properties": {
+    "reasoning": {
+      "type": "string",
+      "maxLength": 1000,
+      "description": "Explanation of the optimization strategy"
+    },
+    "productivity_score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "Overall productivity score for the suggested schedule"
+    },
+    "items": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 50,
+      "items": {
+        "type": "object",
+        "required": ["task_id", "suggested_start_iso", "suggested_duration_minutes"],
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "UUID of the task to schedule"
+          },
+          "suggested_start_iso": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Suggested start time in ISO 8601 format"
+          },
+          "suggested_duration_minutes": {
+            "type": "integer",
+            "minimum": 5,
+            "maximum": 480,
+            "description": "Suggested duration in minutes"
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Confidence in this scheduling suggestion"
+          },
+          "reasoning": {
+            "type": "string",
+            "maxLength": 500,
+            "description": "Why this time slot was chosen"
+          },
+          "energy_match": {
+            "type": "string",
+            "enum": ["perfect", "good", "acceptable", "poor"],
+            "description": "How well this slot matches required energy level"
+          },
+          "context_switch_cost": {
+            "type": "string",
+            "enum": ["none", "low", "medium", "high"],
+            "description": "Context switching cost from previous task"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "conflicts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "task_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "IDs of conflicting tasks"
+          },
+          "conflict_type": {
+            "type": "string",
+            "enum": ["time_overlap", "resource_conflict", "energy_conflict", "deadline_conflict"],
+            "description": "Type of conflict"
+          },
+          "resolution": {
+            "type": "string",
+            "description": "Suggested resolution"
+          }
+        }
+      },
+      "description": "Detected scheduling conflicts"
+    },
+    "optimization_metrics": {
+      "type": "object",
+      "properties": {
+        "deep_work_hours": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Total hours allocated for deep work"
+        },
+        "fragmentation_score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Schedule fragmentation (lower is better)"
+        },
+        "deadline_adherence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Percentage of tasks meeting deadlines"
+        },
+        "priority_alignment": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "How well schedule aligns with priorities"
+        },
+        "buffer_time_minutes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total buffer time between tasks"
+        }
+      },
+      "description": "Detailed optimization metrics"
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 200
+      },
+      "description": "Warnings about the schedule"
+    },
+    "suggestions": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 200
+      },
+      "maxItems": 5,
+      "description": "Additional productivity suggestions"
+    }
+  },
+  "additionalProperties": false
+}

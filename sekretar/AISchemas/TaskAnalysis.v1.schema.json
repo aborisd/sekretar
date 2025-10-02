@@ -1,0 +1,97 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://sekretar.app/schemas/task-analysis/v1",
+  "title": "Task Analysis Response",
+  "description": "Schema for LLM task analysis responses",
+  "type": "object",
+  "required": ["suggested_priority", "estimated_duration_minutes", "complexity"],
+  "properties": {
+    "suggested_priority": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 3,
+      "description": "Suggested priority (0=low, 1=medium, 2=high, 3=urgent)"
+    },
+    "estimated_duration_minutes": {
+      "type": "integer",
+      "minimum": 5,
+      "maximum": 480,
+      "description": "Estimated duration in minutes (5 min to 8 hours)"
+    },
+    "suggested_tags": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 50
+      },
+      "maxItems": 10,
+      "description": "Suggested tags for categorization"
+    },
+    "potential_subtasks": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 200
+      },
+      "maxItems": 10,
+      "description": "Potential subtasks to break down the main task"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "work",
+        "personal",
+        "health",
+        "finance",
+        "learning",
+        "creative",
+        "administrative",
+        "communication",
+        "planning",
+        "other"
+      ],
+      "description": "Task category"
+    },
+    "complexity": {
+      "type": "string",
+      "enum": ["simple", "moderate", "complex", "expert"],
+      "description": "Task complexity level"
+    },
+    "energy_level_required": {
+      "type": "string",
+      "enum": ["low", "medium", "high"],
+      "default": "medium",
+      "description": "Required energy/focus level"
+    },
+    "best_time_of_day": {
+      "type": "string",
+      "enum": ["morning", "afternoon", "evening", "anytime"],
+      "default": "anytime",
+      "description": "Optimal time of day for this task"
+    },
+    "prerequisites": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 200
+      },
+      "maxItems": 5,
+      "description": "Prerequisites or dependencies"
+    },
+    "success_criteria": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 200
+      },
+      "maxItems": 5,
+      "description": "Success criteria for task completion"
+    },
+    "reasoning": {
+      "type": "string",
+      "maxLength": 500,
+      "description": "Brief explanation of the analysis"
+    }
+  },
+  "additionalProperties": false
+}
