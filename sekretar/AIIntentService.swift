@@ -26,16 +26,13 @@ final class AIIntentService: ObservableObject {
     private var lastAppliedEventIDs: [UUID] = []
 
     // НОВОЕ: Vector Memory для contextual AI (Week 1-2)
-    // TODO: Re-enable when Xcode project configured with SPM dependencies
-    // private let vectorStore: VectorMemoryStore?
+    private let memoryService: MemoryService
 
     init(context: NSManagedObjectContext = PersistenceController.shared.container.viewContext,
          llmProvider: LLMProviderProtocol = AIProviderFactory.current()) {
         self.context = context
         self.llmProvider = llmProvider
-
-        // TODO: Re-enable VectorMemoryStore
-        // self.vectorStore = try? VectorMemoryStore()
+        self.memoryService = MemoryService.shared
 
         let stored = UserDefaults.standard.object(forKey: Self.chatModeStorageKey) as? Bool
         self.isChatLLMEnabled = stored ?? true
@@ -44,7 +41,19 @@ final class AIIntentService: ObservableObject {
     private static let chatModeStorageKey = "ai.chat.llm.enabled"
 
     func chatResponse(for input: String) async throws -> String {
-        try await llmProvider.generateResponse(input)
+        // Обогащаем запрос контекстом из памяти
+        let contextPrompt = try await memoryService.buildContextPrompt(for: input, limit: 3)
+        let enrichedInput = input + contextPrompt
+
+        let response = try await llmProvider.generateResponse(enrichedInput)
+
+        // Сохраняем взаимодействие в память
+        await memoryService.recordInteraction(
+            userInput: input,
+            aiResponse: response
+        )
+
+        return response
     }
 
     func setChatLLMEnabled(_ enabled: Bool) {
@@ -483,10 +492,16 @@ final class AIIntentService: ObservableObject {
             task.updatedAt = Date()
             // Если распознали окно — используем как dueDate, иначе можно поставить nil
             task.dueDate = due
-            
+
             try? self.context.save()
             createdTask = task
         }
+
+        // Сохраняем в vector memory
+        if let task = createdTask {
+            await memoryService.recordTaskAction(task, action: .created)
+        }
+
         // Предложим открыть список задач на соответствующую дату
         self.lastOpenLink = OpenLink(tab: .tasks, date: due)
 
@@ -582,6 +597,12 @@ final class AIIntentService: ObservableObject {
             try? self.context.save()
             created = ev
         }
+
+        // Сохраняем в vector memory
+        if let event = created {
+            await memoryService.recordEventAction(event, action: .created)
+        }
+
         if let created { try? await EventKitService(context: context).syncToEventKit(created) }
         self.lastOpenLink = OpenLink(tab: .calendar, date: start)
         publishAppliedAction(type: action.type, date: start)

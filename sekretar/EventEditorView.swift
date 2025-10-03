@@ -227,24 +227,42 @@ struct EventEditorView: View {
 
         do {
             // Measure entity creation performance (BRD: < 300ms)
-            let _ = PerformanceMonitor.shared.measureSync(
+            let _ = try PerformanceMonitor.shared.measureSync(
                 operation: "Save Event",
                 category: .entityCreation
             ) {
-                try? context.save()
+                try context.save()
             }
-            Task { try? await EventKitService(context: context).syncToEventKit(event) }
+
+            Task {
+                try? await EventKitService(context: context).syncToEventKit(event)
+
+                // Сохраняем в vector memory
+                await MemoryService.shared.recordEventAction(
+                    event,
+                    action: isNewEvent ? .created : .updated
+                )
+            }
+
+            isSaving = false
+
 #if canImport(UIKit)
             notify(.success)
 #endif
             dismiss()
+
         } catch {
+            isSaving = false
+
+            print("❌ [EventEditor] Failed to save event: \(error)")
+
 #if canImport(UIKit)
             notify(.error)
 #endif
-        }
 
-        isSaving = false
+            // Rollback изменений
+            context.rollback()
+        }
     }
 
     private func deleteEvent() {
@@ -252,6 +270,12 @@ struct EventEditorView: View {
         if let eventKitId = event.eventKitId {
             Task { try? await service.deleteFromEventKit(eventKitId: eventKitId) }
         }
+
+        // Сохраняем в vector memory перед удалением
+        Task {
+            await MemoryService.shared.recordEventAction(event, action: .deleted)
+        }
+
         context.delete(event)
         try? context.save()
 #if canImport(UIKit)

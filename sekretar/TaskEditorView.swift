@@ -311,13 +311,13 @@ struct TaskEditorView: View {
 
         do {
             // Measure entity creation performance (BRD: < 300ms)
-            let _ = PerformanceMonitor.shared.measureSync(
+            let _ = try PerformanceMonitor.shared.measureSync(
                 operation: "Save Task",
                 category: .entityCreation
             ) {
-                try? context.save()
+                try context.save()
             }
-            
+
             Task {
                 if hasDue, let dueDate = dueDate {
                     await NotificationService.scheduleTaskReminder(task)
@@ -327,21 +327,39 @@ struct TaskEditorView: View {
                     }
                 }
             }
-            
+
             AnalyticsService.shared.track(isNewTask ? .taskCreated : .taskUpdated, properties: [
                 "priority": priority,
                 "has_due_date": hasDue,
                 "has_notes": !(task.notes?.isEmpty ?? true)
             ])
-            
+
+            // Сохраняем в vector memory
+            Task {
+                await MemoryService.shared.recordTaskAction(
+                    task,
+                    action: isNewTask ? .created : .updated
+                )
+            }
+
+            withAnimation(DesignSystem.Animation.standard) {
+                isSaving = false
+            }
+
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             dismiss()
-            
+
         } catch {
+            withAnimation(DesignSystem.Animation.standard) {
+                isSaving = false
+            }
+
+            print("❌ [TaskEditor] Failed to save task: \(error)")
             UINotificationFeedbackGenerator().notificationOccurred(.error)
+
+            // Rollback изменений
+            context.rollback()
         }
-        
-        isSaving = false
     }
     
     private func deleteTask() {
@@ -349,14 +367,20 @@ struct TaskEditorView: View {
             if let taskId = task.id {
                 NotificationService.cancelReminder(for: taskId)
             }
+
+            // Сохраняем в vector memory перед удалением
+            Task {
+                await MemoryService.shared.recordTaskAction(task, action: .deleted)
+            }
+
             context.delete(task)
             try? context.save()
-            
+
             AnalyticsService.shared.track(.taskDeleted, properties: [
                 "priority": Int(task.priority),
                 "was_completed": task.isCompleted
             ])
-            
+
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             dismiss()
         }

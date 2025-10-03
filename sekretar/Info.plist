@@ -44,5 +44,18 @@
     <string>Голосовой ввод помогает быстрее формулировать задачи и запросы.</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>Микрофон используется для голосового ввода в чате.</string>
+
+    <!-- Background modes -->
+    <key>UIBackgroundModes</key>
+    <array>
+        <string>fetch</string>
+        <string>processing</string>
+    </array>
+
+    <!-- Background task identifiers -->
+    <key>BGTaskSchedulerPermittedIdentifiers</key>
+    <array>
+        <string>com.sekretar.backgroundSync</string>
+    </array>
 </dict>
 </plist>

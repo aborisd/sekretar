@@ -218,21 +218,118 @@ class LocalNLUModel {
 /// Cloud NLU Service - fallback для сложных запросов
 class CloudNLUService {
 
-    private let llmRouter: SmartLLMRouter?
+    private let llmClient: MultiProviderLLMClient
 
     init() {
-        // Интегрируется со SmartLLMRouter из Week 3-4
-        self.llmRouter = nil // TODO: inject в Week 3-4
+        // Интегрируется со SmartLLMRouter через MultiProviderLLMClient
+        self.llmClient = MultiProviderLLMClient.shared
     }
 
     func parse(_ text: String, withContext context: UserContext, retries: Int) async throws -> ParsedIntent {
-        // TODO: Интегрировать с LLM через SmartRouter
-        // Пока возвращаем базовый результат
+        // Используем SmartRouter для парсинга через LLM
+        let prompt = buildNLUPrompt(text: text, context: context)
+
+        do {
+            let response = try await llmClient.generateWithRouting(prompt, userTier: .free)
+
+            // Парсим ответ от LLM
+            return try parseNLUResponse(response, originalText: text)
+
+        } catch {
+            print("⚠️ [CloudNLU] Failed to parse via LLM: \(error)")
+
+            // Fallback на базовый парсинг
+            return ParsedIntent(
+                type: .unknown,
+                confidence: 0.3,
+                originalText: text,
+                cloudProcessed: false
+            )
+        }
+    }
+
+    private func buildNLUPrompt(text: String, context: UserContext) -> String {
+        return """
+        Parse the following user request into a structured intent.
+
+        User request: \(text)
+
+        Context:
+        - Current time: \(context.timeContext)
+        - Recent tasks: \(context.recentTasks.count)
+        - Recent events: \(context.recentEvents.count)
+
+        Respond with JSON:
+        {
+            "intent_type": "create_task|create_event|update_task|update_event|delete_task|delete_event|unknown",
+            "confidence": 0.0-1.0,
+            "extracted_data": {
+                "title": "string (optional)",
+                "due_date": "ISO8601 (optional)",
+                "priority": 1-3 (optional),
+                "is_all_day": boolean (optional)
+            }
+        }
+        """
+    }
+
+    struct NLUResponseJSON: Decodable {
+        let intent_type: String
+        let confidence: Double
+        let extracted_data: ExtractedData?
+
+        struct ExtractedData: Decodable {
+            let title: String?
+            let due_date: String?
+            let priority: Int?
+            let is_all_day: Bool?
+        }
+    }
+
+    private func parseNLUResponse(_ response: String, originalText: String) throws -> ParsedIntent {
+        // Парсим JSON ответ от LLM
+        guard let jsonData = response.data(using: .utf8) else {
+            throw NSError(domain: "CloudNLU", code: -1,
+                         userInfo: [NSLocalizedDescriptionKey: "Failed to encode response"])
+        }
+
+        let decoded = try JSONDecoder().decode(NLUResponseJSON.self, from: jsonData)
+
+        // Преобразуем в IntentType
+        let intentType: IntentType = {
+            switch decoded.intent_type {
+            case "create_task": return .createTask
+            case "create_event": return .createEvent
+            case "update_task": return .updateTask
+            case "update_event": return .updateEvent
+            case "delete_task": return .deleteTask
+            case "delete_event": return .deleteEvent
+            default: return .unknown
+            }
+        }()
+
+        // Собираем extracted data
+        var extractedData: [String: Any] = [:]
+        if let data = decoded.extracted_data {
+            if let title = data.title {
+                extractedData["title"] = title
+            }
+            if let dueDate = data.due_date, let date = ISO8601DateFormatter().date(from: dueDate) {
+                extractedData["dueDate"] = date
+            }
+            if let priority = data.priority {
+                extractedData["priority"] = priority
+            }
+            if let isAllDay = data.is_all_day {
+                extractedData["isAllDay"] = isAllDay
+            }
+        }
 
         return ParsedIntent(
-            type: .unknown,
-            confidence: 0.6,
-            originalText: text,
+            type: intentType,
+            confidence: decoded.confidence,
+            originalText: originalText,
+            extractedData: extractedData,
             cloudProcessed: true
         )
     }
@@ -416,11 +513,4 @@ struct UserContext {
     let recentEvents: [Any]
     let userPreferences: [String: Any]
     let timeContext: Date
-}
-
-// MARK: - Smart LLM Router Stub
-
-/// Placeholder для SmartLLMRouter (Week 3-4)
-class SmartLLMRouter {
-    // TODO: Implement in Week 3-4
 }

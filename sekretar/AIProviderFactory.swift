@@ -38,6 +38,9 @@ enum AIProviderFactory {
             return MLCLLMProvider.shared
         case "remote":
             return RemoteLLMProvider.shared
+        case "multi":
+            // NEW: Smart routing with multiple providers
+            return MultiProviderLLMClient.shared
         case "local":
             return EnhancedLLMProvider.shared
         case "openai":
