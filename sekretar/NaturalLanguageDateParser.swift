@@ -91,6 +91,68 @@ struct NaturalLanguageDateParser {
         return patterns.compactMap { try? NSRegularExpression(pattern: $0, options: [.caseInsensitive]) }
     }()
 
+    // НОВОЕ: Расширенные относительные паттерны (из ai_calendar_production_plan_v4.md)
+    private static let advancedRelativePatterns: [String: (Calendar, Date) -> Date?] = [
+        // Конец месяца
+        "в конце месяца": { cal, ref in
+            guard let range = cal.range(of: .day, in: .month, for: ref),
+                  let lastDay = cal.date(bySetting: .day, value: range.upperBound - 1, of: ref) else {
+                return nil
+            }
+            return cal.date(bySettingHour: 18, minute: 0, second: 0, of: lastDay)
+        },
+        "at the end of the month": { cal, ref in
+            guard let range = cal.range(of: .day, in: .month, for: ref),
+                  let lastDay = cal.date(bySetting: .day, value: range.upperBound - 1, of: ref) else {
+                return nil
+            }
+            return cal.date(bySettingHour: 18, minute: 0, second: 0, of: lastDay)
+        },
+        // Начало месяца
+        "в начале месяца": { cal, ref in
+            guard let firstDay = cal.date(from: cal.dateComponents([.year, .month], from: ref)) else {
+                return nil
+            }
+            return cal.date(bySettingHour: 9, minute: 0, second: 0, of: firstDay)
+        },
+        "at the beginning of the month": { cal, ref in
+            guard let firstDay = cal.date(from: cal.dateComponents([.year, .month], from: ref)) else {
+                return nil
+            }
+            return cal.date(bySettingHour: 9, minute: 0, second: 0, of: firstDay)
+        },
+        // Следующая неделя
+        "на следующей неделе": { cal, ref in
+            guard let nextWeek = cal.date(byAdding: .weekOfYear, value: 1, to: ref),
+                  let monday = cal.date(from: cal.dateComponents([.yearForWeekOfYear, .weekOfYear], from: nextWeek)) else {
+                return nil
+            }
+            return cal.date(bySettingHour: 9, minute: 0, second: 0, of: monday)
+        },
+        "next week": { cal, ref in
+            guard let nextWeek = cal.date(byAdding: .weekOfYear, value: 1, to: ref),
+                  let monday = cal.date(from: cal.dateComponents([.yearForWeekOfYear, .weekOfYear], from: nextWeek)) else {
+                return nil
+            }
+            return cal.date(bySettingHour: 9, minute: 0, second: 0, of: monday)
+        },
+        // Конец недели
+        "в конце недели": { cal, ref in
+            guard let startOfWeek = cal.date(from: cal.dateComponents([.yearForWeekOfYear, .weekOfYear], from: ref)),
+                  let friday = cal.date(byAdding: .day, value: 4, to: startOfWeek) else {
+                return nil
+            }
+            return cal.date(bySettingHour: 17, minute: 0, second: 0, of: friday)
+        },
+        "end of the week": { cal, ref in
+            guard let startOfWeek = cal.date(from: cal.dateComponents([.yearForWeekOfYear, .weekOfYear], from: ref)),
+                  let friday = cal.date(byAdding: .day, value: 4, to: startOfWeek) else {
+                return nil
+            }
+            return cal.date(bySettingHour: 17, minute: 0, second: 0, of: friday)
+        }
+    ]
+
     private var calendar: Calendar
     private let locale: Locale
 
@@ -119,6 +181,16 @@ struct NaturalLanguageDateParser {
 
         var baseDay = calendar.startOfDay(for: reference)
         var matchedDay = false
+
+        // НОВОЕ: Проверяем расширенные относительные паттерны сначала
+        for (pattern, handler) in Self.advancedRelativePatterns {
+            if lower.contains(pattern) {
+                if let date = handler(calendar, reference) {
+                    let duration = parseExplicitDuration(in: lower) ?? 3600
+                    return DateTimeParsingResult(start: date, end: date.addingTimeInterval(duration), isAllDay: false)
+                }
+            }
+        }
 
         if let explicitDate = parseExplicitDate(in: lower, reference: reference) {
             baseDay = calendar.startOfDay(for: explicitDate)
@@ -396,7 +468,8 @@ private extension NaturalLanguageDateParser {
     }
 
     func parseSingleTime(in text: String, baseDay: Date, periodHint: DayPeriod?) -> Date? {
-        let pattern = #"(?:(?:в|к|на|at|по)\s*)(\d{1,2})(?:[:.](\d{2}))?\s*(утра|утром|вечера|вечером|дня|ночи|pm|am|morning|evening|afternoon|night)?"#
+        // Updated pattern to better capture "часа дня" and similar constructs
+        let pattern = #"(?:(?:в|к|на|at|по)\s*)(\d{1,2})(?:[:.](\d{2}))?\s*(?:час(?:а|ов)?\s*)?(утра|утром|вечера|вечером|дня|ночи|pm|am|morning|evening|afternoon|night)?"#
         guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { return nil }
         let range = NSRange(text.startIndex..<text.endIndex, in: text)
         if let match = regex.firstMatch(in: text, options: [], range: range) {
@@ -600,7 +673,10 @@ private extension NaturalLanguageDateParser {
         let appliedSuffix = suffixLower ?? fallbackLower
 
         if let appliedSuffix {
-            if containsAny(in: appliedSuffix, keywords: Self.eveningKeywords + ["pm", "afternoon"]) && h < 12 {
+            // First check for afternoon keywords including "дня"
+            if containsAny(in: appliedSuffix, keywords: Self.afternoonKeywords + ["дня"]) && h < 12 {
+                h += 12
+            } else if containsAny(in: appliedSuffix, keywords: Self.eveningKeywords + ["pm"]) && h < 12 {
                 h += 12
             } else if containsAny(in: appliedSuffix, keywords: Self.morningKeywords + ["am", "morning"]) {
                 if h == 12 { h = 0 }

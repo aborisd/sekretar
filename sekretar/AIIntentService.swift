@@ -24,11 +24,19 @@ final class AIIntentService: ObservableObject {
     private let context: NSManagedObjectContext
     private let naturalLanguageParser = NaturalLanguageDateParser()
     private var lastAppliedEventIDs: [UUID] = []
-    
+
+    // НОВОЕ: Vector Memory для contextual AI (Week 1-2)
+    // TODO: Re-enable when Xcode project configured with SPM dependencies
+    // private let vectorStore: VectorMemoryStore?
+
     init(context: NSManagedObjectContext = PersistenceController.shared.container.viewContext,
          llmProvider: LLMProviderProtocol = AIProviderFactory.current()) {
         self.context = context
         self.llmProvider = llmProvider
+
+        // TODO: Re-enable VectorMemoryStore
+        // self.vectorStore = try? VectorMemoryStore()
+
         let stored = UserDefaults.standard.object(forKey: Self.chatModeStorageKey) as? Bool
         self.isChatLLMEnabled = stored ?? true
     }
@@ -1112,6 +1120,49 @@ final class AIIntentService: ObservableObject {
         pendingAction = nil
         showingPreview = false
     }
+
+    // MARK: - Vector Memory Integration (Week 1-2)
+    // TODO: Re-enable when VectorMemoryStore is configured
+
+    /*
+    /// Сохраняет взаимодействие пользователя в vector memory
+    private func saveInteractionToMemory(input: String, action: AIAction) async {
+        guard let vectorStore = vectorStore else { return }
+
+        let content = "User: \(input)\nAI Action: \(action.type.rawValue) - \(action.title)"
+        let metadata: [String: Any] = [
+            "action_type": action.type.rawValue,
+            "confidence": action.confidence,
+            "timestamp": Date().timeIntervalSince1970
+        ]
+
+        do {
+            try await vectorStore.addMemory(
+                content: content,
+                type: .interaction,
+                metadata: metadata
+            )
+        } catch {
+            print("⚠️ [AIService] Failed to save memory: \(error)")
+        }
+    }
+
+    /// Ищет релевантные воспоминания для контекстуального ответа
+    private func searchRelevantMemories(for input: String) async -> [Memory] {
+        guard let vectorStore = vectorStore else { return [] }
+
+        do {
+            return try await vectorStore.searchSimilar(
+                query: input,
+                limit: 5,
+                filters: [.type(.interaction), .type(.task)]
+            )
+        } catch {
+            print("⚠️ [AIService] Memory search failed: \(error)")
+            return []
+        }
+    }
+    */
 }
 
 // MARK: - Data Models

@@ -1,0 +1,356 @@
+import Foundation
+import SQLite
+
+// MARK: - Vector Memory Store (из ai_calendar_production_plan.md Week 1-2)
+
+/// On-device vector memory для semantic search
+/// Использует SQLite-VSS для хранения embeddings
+class VectorMemoryStore {
+
+    // MARK: - Properties
+
+    private let db: Connection
+    private let embeddingDimension = 768 // Universal Sentence Encoder dimension
+
+    // Tables
+    private let memories = Table("memories")
+
+    // Columns
+    private let id = Expression<Int64>("rowid")
+    private let embedding = Expression<Data>("embedding")
+    private let content = Expression<String>("content")
+    private let type = Expression<String>("type")
+    private let metadata = Expression<String>("metadata")
+    private let timestamp = Expression<Int64>("timestamp")
+    private let userContext = Expression<String>("user_context")
+
+    // MARK: - Initialization
+
+    init() throws {
+        // Путь к vector DB
+        let path = FileManager.default
+            .urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("vector_memory.db")
+
+        print("📦 [VectorMemory] Initializing at: \(path.path)")
+
+        db = try Connection(path.path)
+
+        // TODO: Load VSS extension в Week 1-2
+        // try db.loadExtension("vector0")
+
+        try setupSchema()
+
+        print("✅ [VectorMemory] Initialized successfully")
+    }
+
+    // MARK: - Schema Setup
+
+    private func setupSchema() throws {
+        // Пока используем обычную таблицу
+        // В Week 1-2 переключимся на VIRTUAL TABLE с VSS
+
+        try db.run("""
+            CREATE TABLE IF NOT EXISTS memories (
+                rowid INTEGER PRIMARY KEY AUTOINCREMENT,
+                embedding BLOB NOT NULL,
+                content TEXT NOT NULL,
+                type TEXT NOT NULL,
+                metadata TEXT NOT NULL,
+                timestamp INTEGER NOT NULL,
+                user_context TEXT NOT NULL
+            )
+        """)
+
+        // Индексы для fast queries
+        try db.run("""
+            CREATE INDEX IF NOT EXISTS idx_memories_type
+            ON memories(type, timestamp DESC)
+        """)
+
+        try db.run("""
+            CREATE INDEX IF NOT EXISTS idx_memories_timestamp
+            ON memories(timestamp DESC)
+        """)
+
+        print("  ✓ Schema created")
+    }
+
+    // MARK: - Core Methods
+
+    /// Добавить память в vector store
+    func addMemory(
+        content: String,
+        type: MemoryType,
+        metadata: [String: Any] = [:]
+    ) async throws {
+
+        print("💾 [VectorMemory] Adding memory: \(type.rawValue)")
+
+        // Генерируем embedding
+        let embedding = try await LocalEmbedder.shared.embed(content)
+        let embeddingData = embedding.toData()
+
+        // Сериализуем metadata
+        let metadataJSON = try JSONSerialization.data(withJSONObject: metadata)
+        let metadataString = String(data: metadataJSON, encoding: .utf8) ?? "{}"
+
+        // Получаем текущий контекст пользователя
+        let currentContext = getCurrentUserContext()
+
+        // Вставляем в БД
+        let insert = memories.insert(
+            self.embedding <- embeddingData,
+            self.content <- content,
+            self.type <- type.rawValue,
+            self.metadata <- metadataString,
+            self.timestamp <- Int64(Date().timeIntervalSince1970),
+            self.userContext <- currentContext
+        )
+
+        try db.run(insert)
+
+        print("  ✓ Memory added (embedding size: \(embeddingData.count) bytes)")
+    }
+
+    /// Поиск похожих воспоминаний (semantic search)
+    func searchSimilar(
+        query: String,
+        limit: Int = 5,
+        filters: [MemoryFilter] = []
+    ) async throws -> [Memory] {
+
+        print("🔍 [VectorMemory] Searching for: '\(query)'")
+
+        // Генерируем embedding для query
+        let queryEmbedding = try await LocalEmbedder.shared.embed(query)
+
+        // Получаем все memories (или с фильтрами)
+        var sql = """
+            SELECT rowid, content, type, metadata, timestamp, user_context, embedding
+            FROM memories
+        """
+
+        // Применяем фильтры
+        if !filters.isEmpty {
+            let whereClauses = filters.map { filter -> String in
+                switch filter {
+                case .type(let memType):
+                    return "type = '\(memType.rawValue)'"
+                case .afterDate(let date):
+                    return "timestamp >= \(Int64(date.timeIntervalSince1970))"
+                case .beforeDate(let date):
+                    return "timestamp <= \(Int64(date.timeIntervalSince1970))"
+                }
+            }
+            sql += " WHERE " + whereClauses.joined(separator: " AND ")
+        }
+
+        sql += " ORDER BY timestamp DESC"
+
+        // Выполняем query
+        let rows = try db.prepare(sql)
+
+        // Вычисляем cosine similarity для каждой записи
+        var results: [(memory: Memory, similarity: Float)] = []
+
+        for row in rows {
+            let embeddingData = row[6] as! Data
+            let storedEmbedding = embeddingData.toFloatArray()
+
+            // Cosine similarity
+            let similarity = cosineSimilarity(queryEmbedding, storedEmbedding)
+
+            let memory = Memory(
+                id: row[0] as! Int64,
+                content: row[1] as! String,
+                type: MemoryType(rawValue: row[2] as! String) ?? .interaction,
+                metadata: parseMetadata(row[3] as! String),
+                timestamp: Date(timeIntervalSince1970: TimeInterval(row[4] as! Int64)),
+                userContext: row[5] as! String,
+                similarity: similarity
+            )
+
+            results.append((memory, similarity))
+        }
+
+        // Сортируем по similarity и берем top-K
+        let topResults = results
+            .sorted { $0.similarity > $1.similarity }
+            .prefix(limit)
+            .map { $0.memory }
+
+        print("  ✓ Found \(topResults.count) similar memories")
+
+        return Array(topResults)
+    }
+
+    /// Получить недавние memories
+    func getRecent(limit: Int = 10, type: MemoryType? = nil) throws -> [Memory] {
+        var query = memories
+            .order(timestamp.desc)
+            .limit(limit)
+
+        if let memType = type {
+            query = query.filter(self.type == memType.rawValue)
+        }
+
+        var results: [Memory] = []
+
+        for row in try db.prepare(query) {
+            let memory = Memory(
+                id: row[id],
+                content: row[content],
+                type: MemoryType(rawValue: row[self.type]) ?? .interaction,
+                metadata: parseMetadata(row[metadata]),
+                timestamp: Date(timeIntervalSince1970: TimeInterval(row[timestamp])),
+                userContext: row[userContext],
+                similarity: 1.0 // N/A для recent queries
+            )
+            results.append(memory)
+        }
+
+        return results
+    }
+
+    /// Очистить старые memories
+    func cleanup(olderThan days: Int) throws {
+        let cutoffDate = Date().addingTimeInterval(-Double(days * 86400))
+        let cutoffTimestamp = Int64(cutoffDate.timeIntervalSince1970)
+
+        let query = memories.filter(timestamp < cutoffTimestamp)
+        let deleted = try db.run(query.delete())
+
+        print("🧹 [VectorMemory] Cleaned up \(deleted) old memories")
+    }
+
+    /// Получить статистику
+    func getStats() throws -> MemoryStats {
+        let totalCount = try db.scalar(memories.count)
+
+        var typeBreakdown: [String: Int] = [:]
+
+        let typeQuery = """
+            SELECT type, COUNT(*) as count
+            FROM memories
+            GROUP BY type
+        """
+
+        for row in try db.prepare(typeQuery) {
+            let type = row[0] as! String
+            let count = row[1] as! Int64
+            typeBreakdown[type] = Int(count)
+        }
+
+        // Вычисляем размер БД
+        let dbPath = FileManager.default
+            .urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("vector_memory.db")
+
+        let attributes = try? FileManager.default.attributesOfItem(atPath: dbPath.path)
+        let sizeBytes = (attributes?[.size] as? NSNumber)?.int64Value ?? 0
+
+        return MemoryStats(
+            totalMemories: totalCount,
+            typeBreakdown: typeBreakdown,
+            databaseSizeBytes: sizeBytes
+        )
+    }
+
+    // MARK: - Helper Methods
+
+    private func getCurrentUserContext() -> String {
+        // Snapshot текущего состояния пользователя
+        let context: [String: Any] = [
+            "timestamp": Date().timeIntervalSince1970,
+            "device": "iOS",
+            // TODO: Добавить больше контекста (активные задачи, события и т.д.)
+        ]
+
+        if let data = try? JSONSerialization.data(withJSONObject: context),
+           let json = String(data: data, encoding: .utf8) {
+            return json
+        }
+
+        return "{}"
+    }
+
+    private func parseMetadata(_ jsonString: String) -> [String: Any] {
+        guard let data = jsonString.data(using: .utf8),
+              let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return [:]
+        }
+        return dict
+    }
+
+    /// Cosine similarity между двумя векторами
+    private func cosineSimilarity(_ a: [Float], _ b: [Float]) -> Float {
+        guard a.count == b.count else { return 0 }
+
+        var dotProduct: Float = 0
+        var normA: Float = 0
+        var normB: Float = 0
+
+        for i in 0..<a.count {
+            dotProduct += a[i] * b[i]
+            normA += a[i] * a[i]
+            normB += b[i] * b[i]
+        }
+
+        let denominator = sqrt(normA) * sqrt(normB)
+
+        return denominator > 0 ? dotProduct / denominator : 0
+    }
+}
+
+// MARK: - Data Models
+
+enum MemoryType: String, CaseIterable {
+    case interaction  // User-AI chat messages
+    case task        // Task descriptions and changes
+    case event       // Event details
+    case insight     // AI-generated insights
+    case pattern     // Detected behavioral patterns
+}
+
+enum MemoryFilter {
+    case type(MemoryType)
+    case afterDate(Date)
+    case beforeDate(Date)
+}
+
+struct Memory {
+    let id: Int64
+    let content: String
+    let type: MemoryType
+    let metadata: [String: Any]
+    let timestamp: Date
+    let userContext: String
+    let similarity: Float // 0-1, relevance score
+}
+
+struct MemoryStats {
+    let totalMemories: Int
+    let typeBreakdown: [String: Int]
+    let databaseSizeBytes: Int64
+
+    var databaseSizeMB: Double {
+        return Double(databaseSizeBytes) / 1024.0 / 1024.0
+    }
+}
+
+// MARK: - Extensions
+
+extension Array where Element == Float {
+    func toData() -> Data {
+        return self.withUnsafeBytes { Data($0) }
+    }
+}
+
+extension Data {
+    func toFloatArray() -> [Float] {
+        return self.withUnsafeBytes { buffer in
+            Array(buffer.bindMemory(to: Float.self))
+        }
+    }
+}

@@ -35,7 +35,38 @@ extension PersistenceController {
         let updatedAt = NSAttributeDescription()
         updatedAt.name = "updatedAt"; updatedAt.attributeType = .dateAttributeType; updatedAt.isOptional = false
 
-        taskEntity.properties = [id, title, notes, dueDate, isCompleted, priority, createdAt, updatedAt]
+        // НОВОЕ: Production features (из ai_calendar_production_plan.md Week 1-2)
+        let embeddingVector = NSAttributeDescription()
+        embeddingVector.name = "embeddingVector"
+        embeddingVector.attributeType = .binaryDataAttributeType
+        embeddingVector.isOptional = true
+        embeddingVector.allowsExternalBinaryDataStorage = true // Для больших векторов
+
+        let aiMetadata = NSAttributeDescription()
+        aiMetadata.name = "aiMetadata"
+        aiMetadata.attributeType = .stringAttributeType
+        aiMetadata.isOptional = true // JSON with AI-generated insights
+
+        let serverSyncId = NSAttributeDescription()
+        serverSyncId.name = "serverSyncId"
+        serverSyncId.attributeType = .UUIDAttributeType
+        serverSyncId.isOptional = true // For backend sync
+
+        let lastSyncedAt = NSAttributeDescription()
+        lastSyncedAt.name = "lastSyncedAt"
+        lastSyncedAt.attributeType = .dateAttributeType
+        lastSyncedAt.isOptional = true
+
+        let conflictVersion = NSAttributeDescription()
+        conflictVersion.name = "conflictVersion"
+        conflictVersion.attributeType = .integer32AttributeType
+        conflictVersion.defaultValue = 1 // For conflict resolution
+
+        taskEntity.properties = [
+            id, title, notes, dueDate, isCompleted, priority, createdAt, updatedAt,
+            // Production fields:
+            embeddingVector, aiMetadata, serverSyncId, lastSyncedAt, conflictVersion
+        ]
 
         // EventEntity
         let eventEntity = NSEntityDescription()
@@ -50,7 +81,38 @@ extension PersistenceController {
         let eNotes = NSAttributeDescription(); eNotes.name = "notes"; eNotes.attributeType = .stringAttributeType; eNotes.isOptional = true
         let eventKitId = NSAttributeDescription(); eventKitId.name = "eventKitId"; eventKitId.attributeType = .stringAttributeType; eventKitId.isOptional = true
 
-        eventEntity.properties = [eId, eTitle, startDate, endDate, isAllDay, eNotes, eventKitId]
+        // Production features для events
+        let eEmbeddingVector = NSAttributeDescription()
+        eEmbeddingVector.name = "embeddingVector"
+        eEmbeddingVector.attributeType = .binaryDataAttributeType
+        eEmbeddingVector.isOptional = true
+        eEmbeddingVector.allowsExternalBinaryDataStorage = true
+
+        let eAiMetadata = NSAttributeDescription()
+        eAiMetadata.name = "aiMetadata"
+        eAiMetadata.attributeType = .stringAttributeType
+        eAiMetadata.isOptional = true
+
+        let eServerSyncId = NSAttributeDescription()
+        eServerSyncId.name = "serverSyncId"
+        eServerSyncId.attributeType = .UUIDAttributeType
+        eServerSyncId.isOptional = true
+
+        let eLastSyncedAt = NSAttributeDescription()
+        eLastSyncedAt.name = "lastSyncedAt"
+        eLastSyncedAt.attributeType = .dateAttributeType
+        eLastSyncedAt.isOptional = true
+
+        let eConflictVersion = NSAttributeDescription()
+        eConflictVersion.name = "conflictVersion"
+        eConflictVersion.attributeType = .integer32AttributeType
+        eConflictVersion.defaultValue = 1
+
+        eventEntity.properties = [
+            eId, eTitle, startDate, endDate, isAllDay, eNotes, eventKitId,
+            // Production fields:
+            eEmbeddingVector, eAiMetadata, eServerSyncId, eLastSyncedAt, eConflictVersion
+        ]
 
         // ProjectEntity
         let projectEntity = NSEntityDescription()

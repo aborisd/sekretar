@@ -210,45 +210,66 @@ private struct Bubble: View {
     let message: ChatMessage
 
     var body: some View {
-        Text(message.text)
-            .font(.system(size: 15))
-            .foregroundColor(textColor)
-            .padding(.vertical, 6)
-            .padding(.horizontal, 10)
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(fillColor)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(strokeColor)
-            )
+        VStack(alignment: message.isUser ? .trailing : .leading, spacing: 4) {
+            Text(message.text)
+                .font(.system(size: 16))
+                .foregroundColor(textColor)
+                .padding(.vertical, 10)
+                .padding(.horizontal, 14)
+                .background(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(fillColor)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(strokeColor, lineWidth: 0.5)
+                )
+
+            // Time label
+            Text(timeString)
+                .font(.system(size: 11))
+                .foregroundStyle(.tertiary)
+                .padding(.horizontal, 8)
+        }
+    }
+
+    private var timeString: String {
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        return formatter.string(from: message.timestamp)
     }
 
     private var fillColor: Color {
         switch message.author {
         case .user:
-            return Color.blue.opacity(0.14)
+            return Color.blue
         case .assistant:
-            return DesignSystem.Colors.cardBackground
+            return Color(UIColor.systemGray5)
         case .system:
-            return Color.gray.opacity(0.18)
+            return Color(UIColor.systemGray6)
         }
     }
 
     private var strokeColor: Color {
         switch message.author {
         case .user:
-            return Color.blue.opacity(0.25)
+            return Color.blue.opacity(0.8)
         case .assistant:
-            return Color.black.opacity(0.08)
+            return Color.gray.opacity(0.2)
         case .system:
-            return Color.gray.opacity(0.3)
+            return Color.gray.opacity(0.15)
         }
     }
 
     private var textColor: Color {
-        message.author == .system ? .secondary : .primary
+        switch message.author {
+        case .user:
+            return .white
+        case .assistant:
+            return .primary
+        case .system:
+            return .secondary
+        }
     }
 }
 
@@ -362,7 +383,7 @@ struct ChatScreen: View {
                     .buttonStyle(.borderedProminent)
                     .tint(Color.red.opacity(0.85))
                 } else {
-                    Button(action: { 
+                    Button(action: {
                         vm.currentTask?.cancel()
                         vm.currentTask = Task { @MainActor in
                         if voice.isRecording {
@@ -381,38 +402,36 @@ struct ChatScreen: View {
                     } }) {
                         Image(systemName: voice.isRecording ? "mic.circle.fill" : "mic.circle")
                             .font(.system(size: 16, weight: .semibold))
+                            .symbolEffect(.pulse, value: voice.isRecording)
                     }
                     .buttonStyle(.bordered)
-                    .tint(DesignSystem.Colors.primaryTeal)
+                    .tint(voice.isRecording ? Color.red : DesignSystem.Colors.primaryTeal)
                     .disabled(ai.isProcessing)
+                    .scaleEffect(voice.isRecording ? 1.1 : 1.0)
+                    .animation(.easeInOut(duration: 0.2), value: voice.isRecording)
                 }
 
-                // Кнопка структурного разбора/интента (предпросмотр действий)
-                Button {
-                    let text = vm.input.trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard !text.isEmpty else { return }
-                    vm.currentTask?.cancel()
-                    vm.currentTask = Task { @MainActor in await ai.processUserInput(text) }
-                    // Сбрасываем поле ввода сразу после запуска анализа
-                    vm.input = ""
-                } label: {
-                    Image(systemName: "wand.and.stars")
-                        .font(.system(size: 16, weight: .semibold))
-                }
-                .buttonStyle(.bordered)
-
+                // Send button with animation
                 Button(action: {
-                    if voice.isRecording {
-                        Task { await voice.stop(); voice.reset() }
+                    withAnimation(.easeOut(duration: 0.15)) {
+                        if voice.isRecording {
+                            Task { await voice.stop(); voice.reset() }
+                            // Don't send here - let onChange handle it
+                        } else {
+                            vm.send()
+                        }
                     }
-                    vm.send()
                 }) {
                     Image(systemName: "paperplane.fill")
                         .font(.system(size: 16, weight: .semibold))
+                        .rotationEffect(.degrees(vm.typing ? 45 : 0))
+                        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: vm.typing)
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(DesignSystem.Colors.primaryTeal)
                 .disabled(vm.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || ai.isProcessing)
+                .scaleEffect(vm.input.isEmpty ? 0.9 : 1.0)
+                .animation(.easeInOut(duration: 0.15), value: vm.input.isEmpty)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
@@ -699,10 +718,14 @@ private struct MessageRow: View {
 
     private var bubbleRow: some View {
         HStack(spacing: 0) {
-            if message.isUser { Spacer(minLength: 0) }
+            if message.isUser {
+                Spacer(minLength: 40)
+            }
             Bubble(message: message)
-                .frame(maxWidth: 280, alignment: message.isUser ? .trailing : .leading)
-            if !message.isUser { Spacer(minLength: 0) }
+                .frame(maxWidth: UIScreen.main.bounds.width * 0.75, alignment: message.isUser ? .trailing : .leading)
+            if !message.isUser {
+                Spacer(minLength: 40)
+            }
         }
         .frame(maxWidth: .infinity, alignment: message.isUser ? .trailing : .leading)
     }

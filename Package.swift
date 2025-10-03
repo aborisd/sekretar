@@ -11,9 +11,16 @@ let package = Package(
     products: [
         .library(name: "sekretar", targets: ["sekretar"])
     ],
+    dependencies: [
+        // SQLite.swift для Vector Memory Store
+        .package(url: "https://github.com/stephencelis/SQLite.swift.git", from: "0.15.0")
+    ],
     targets: [
         .target(
             name: "sekretar",
+            dependencies: [
+                .product(name: "SQLite", package: "SQLite.swift")
+            ],
             path: "sekretar",
             exclude: [
                 "en.lproj",

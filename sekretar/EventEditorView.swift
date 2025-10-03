@@ -52,6 +52,8 @@ struct EventEditorView: View {
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(L10n.Common.cancel) { cancelEditing() }

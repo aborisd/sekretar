@@ -69,7 +69,6 @@
 				71C9C7D92E4A3E8600AAA75D /* Exceptions for "sekretar" folder in "sekretarUITests" target */,
 			);
 			explicitFileTypes = {
-				Entities.swift = sourcecode.swift;
 				TaskEditorView.swift = sourcecode.swift;
 			};
 			path = sekretar;
