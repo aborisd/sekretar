@@ -24,9 +24,16 @@
     <key>LSRequiresIPhoneOS</key>
     <true/>
 
-    <!-- LaunchScreen (пустой, чтобы Xcode не ругался) -->
+    <!-- LaunchScreen configuration -->
     <key>UILaunchScreen</key>
-    <dict/>
+    <dict>
+        <key>UIImageName</key>
+        <string>AppIcon</string>
+        <key>UIColorName</key>
+        <string>LaunchScreenBackground</string>
+        <key>UILaunchScreen</key>
+        <dict/>
+    </dict>
 
     <!-- (Опционально) Scene-манифест по умолчанию -->
     <key>UIApplicationSceneManifest</key>

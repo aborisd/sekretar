@@ -11,7 +11,7 @@ struct SekretarApp: App {
 
     var body: some Scene {
         WindowGroup {
-            DemoContentView()
+            AppEntryPoint()
                 .environment(\.managedObjectContext, persistence.container.viewContext)
                 .onAppear {
                     // Ensure we have a default model folder structure ready for MLC runtime
