@@ -92,9 +92,23 @@ final class RemoteLLMProvider: LLMProviderProtocol {
         }
 
         // Non-streamed fallback
-        let system = "You are Sekretar, a helpful planning assistant. Be concise and actionable."
-        let temp = Double(cfg(Keys.temperature) ?? "") ?? 0.6
-        let maxTok = Int(cfg(Keys.maxTokens) ?? "") ?? 384
+        let system = """
+        You are Sekretar, an AI planning assistant specialized in task and calendar management.
+
+        Your role:
+        - Help users create, update, and organize tasks and events
+        - Suggest optimal scheduling based on priorities and deadlines
+        - Parse natural language input (Russian or English) into structured actions
+        - Be concise, actionable, and respectful of user's time
+
+        Guidelines:
+        - Always extract dates, times, priorities, and context from user input
+        - If information is missing, ask for clarification
+        - Prefer structured JSON responses when appropriate
+        - Support both Russian and English languages
+        """
+        let temp = Double(cfg(Keys.temperature) ?? "") ?? 0.3
+        let maxTok = Int(cfg(Keys.maxTokens) ?? "") ?? 2000
         let body = ChatRequest(
             model: model,
             messages: [
@@ -153,13 +167,33 @@ final class RemoteLLMProvider: LLMProviderProtocol {
     func detectIntent(_ input: String) async throws -> UserIntent {
         // If not configured, use local
         guard endpoint() != nil else { return try await EnhancedLLMProvider.shared.detectIntent(input) }
-        // Quick RU/EN heuristic first to avoid misclassification by remote
-        if let h = heuristicIntent(input) { return h }
-        // Remote JSON classification (language-agnostic instruction)
-        let schema = "{" +
-            "\"intent\": one of [create_task, modify_task, delete_task, schedule_task, ask_question, request_suggestion]" +
-        "}"
-        let prompt = "Classify the user intent from the following text (may be Russian or English). Return ONLY JSON with field 'intent'. Text: \n\(input)"
+
+        // Remote LLM classification (NO heuristics - full LLM parsing)
+        let schema = """
+        {
+            "intent": "one of: create_task, modify_task, delete_task, schedule_task, ask_question, request_suggestion, create_event, modify_event, delete_event"
+        }
+        """
+
+        let prompt = """
+        You are Sekretar, a planning assistant. Analyze the user input and determine their intent.
+
+        User input (Russian or English): "\(input)"
+
+        Intent definitions:
+        - create_task: User wants to create a new task
+        - modify_task: User wants to update/edit an existing task
+        - delete_task: User wants to delete a task
+        - create_event: User wants to create a calendar event/meeting
+        - modify_event: User wants to update an existing event
+        - delete_event: User wants to delete an event
+        - schedule_task: User wants to find optimal time for a task
+        - request_suggestion: User asks for recommendations/suggestions
+        - ask_question: General question without actionable intent
+
+        Return ONLY valid JSON with the 'intent' field.
+        """
+
         do {
             let payload = try await jsonCall(schemaDescription: schema, userContent: prompt, type: IntentJSON.self)
             switch payload.intent {
@@ -170,10 +204,11 @@ final class RemoteLLMProvider: LLMProviderProtocol {
             case "ask_question": return .askQuestion
             case "request_suggestion": return .requestSuggestion
             default:
+                // Fallback to heuristic only on unrecognized intent
                 return heuristicIntent(input) ?? .unknown
             }
         } catch {
-            // Fallback to heuristic on any remote failure
+            // Fallback to heuristic on LLM failure
             return heuristicIntent(input) ?? .unknown
         }
     }
@@ -355,10 +390,44 @@ final class RemoteLLMProvider: LLMProviderProtocol {
 
     func parseEvent(_ description: String) async throws -> EventDraft {
         guard endpoint() != nil else { return try await EnhancedLLMProvider.shared.parseEvent(description) }
-        let schema = "{" +
-            "\"title\": string, \"start_iso\": ISO8601, \"end_iso\": ISO8601, \"all_day\": boolean" +
-        "}"
-        let json = try await jsonCall(schemaDescription: schema, userContent: "Parse event from text: \(description)", type: EventJSON.self)
+
+        let now = Date()
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        let nowISO = formatter.string(from: now)
+        let tz = TimeZone.current.identifier
+
+        let schema = """
+        {
+            "title": "string",
+            "start_iso": "ISO8601 datetime",
+            "end_iso": "ISO8601 datetime",
+            "all_day": "boolean"
+        }
+        """
+
+        let prompt = """
+        Parse event/task from user input (Russian or English) and return JSON.
+
+        Current time: \(nowISO)
+        Timezone: \(tz)
+
+        User input: "\(description)"
+
+        IMPORTANT TIME PARSING RULES:
+        1. "05:00" or "5:00" means 05:00 (morning), NOT 17:00
+        2. "17:00" or "5pm" means 17:00 (evening)
+        3. If time ambiguous and <12, assume morning (AM)
+        4. If user says "на 2 часа" or "for 2 hours", that's DURATION, not time
+        5. Default duration if not specified: 1 hour
+        6. If only time given (no date), use today if time is future, tomorrow if past
+        7. "завтра" / "tomorrow" = next day
+        8. "сегодня" / "today" = current day
+
+        Return ONLY valid JSON matching schema.
+        """
+
+        let json = try await jsonCall(schemaDescription: schema, userContent: prompt, type: EventJSON.self)
         let start = parseDate(json.start_iso) ?? Date()
         let endCandidate = parseDate(json.end_iso) ?? start.addingTimeInterval(3600)
         let end = endCandidate > start ? endCandidate : start.addingTimeInterval(3600)
@@ -384,6 +453,72 @@ final class RemoteLLMProvider: LLMProviderProtocol {
         fallback.timeZone = TimeZone.current
         fallback.dateFormat = "yyyy-MM-dd HH:mm"
         return fallback.date(from: string)
+    }
+
+    // MARK: - BRD JSON Contract Parsing (BRD строки 296-323)
+    func parseBRDIntent(_ input: String) async throws -> AIAction {
+        guard let (url, apiKey, model) = endpoint() else {
+            throw NSError(domain: "RemoteLLM", code: -1, userInfo: [NSLocalizedDescriptionKey: "LLM not configured"])
+        }
+
+        var systemPrompt = BRDIntentParser.generateBRDSystemPrompt()
+
+        // Inject current time for relative date parsing
+        let now = Date()
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withTimeZone]
+        let currentTimeISO = formatter.string(from: now)
+        systemPrompt = systemPrompt.replacingOccurrences(of: "{{CURRENT_TIME}}", with: currentTimeISO)
+
+        let temp = Double(cfg(Keys.temperature) ?? "") ?? 0.2
+        let maxTok = Int(cfg(Keys.maxTokens) ?? "") ?? 512
+
+        let messages: [ChatMessage] = [
+            .init(role: "system", content: systemPrompt),
+            .init(role: "user", content: input)
+        ]
+
+        let body = ChatRequest(
+            model: model,
+            messages: messages,
+            temperature: temp,
+            max_tokens: maxTok,
+            stream: false
+        )
+
+        let data = try await postJSON(url: url, apiKey: apiKey, body: body)
+        let decoded = try JSONDecoder().decode(ChatResponse.self, from: data)
+
+        guard let content = decoded.choices.first?.message?.content else {
+            throw NSError(domain: "RemoteLLM", code: -3, userInfo: [NSLocalizedDescriptionKey: "No response from LLM"])
+        }
+
+        // DEBUG: Log LLM raw response
+        print("🤖 LLM RAW RESPONSE for '\(input)':")
+        print(content)
+        print("---")
+
+        // Clean markdown code fences if present
+        var cleanedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        if cleanedContent.hasPrefix("```") {
+            cleanedContent = cleanedContent
+                .replacingOccurrences(of: "```json", with: "", options: .caseInsensitive)
+                .replacingOccurrences(of: "```", with: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        // Parse BRD JSON contract with retry logic
+        do {
+            return try BRDIntentParser.parseIntent(from: cleanedContent)
+        } catch {
+            // Retry: extract JSON between first { and last }
+            if let startIdx = cleanedContent.firstIndex(of: "{"),
+               let endIdx = cleanedContent.lastIndex(of: "}") {
+                let jsonSubstring = String(cleanedContent[startIdx...endIdx])
+                return try BRDIntentParser.parseIntent(from: jsonSubstring)
+            }
+            throw error
+        }
     }
 
     // (Legacy fallbacks removed — handled above per-method)

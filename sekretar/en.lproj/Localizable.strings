@@ -170,3 +170,24 @@
 "widget.next_task.description" = "Show your next priority task";
 "widget.no_tasks" = "No tasks";
 "widget.all_done" = "All Done!";
+
+/* Settings */
+"settings.title" = "Settings";
+"settings.general" = "General";
+"settings.theme" = "Theme";
+"settings.language" = "Language";
+"settings.ai" = "Artificial Intelligence";
+"settings.ai_provider" = "AI Provider";
+"settings.permissions" = "Permissions";
+"settings.notifications" = "Notifications";
+"settings.calendar_access" = "Calendar Access";
+"settings.working_hours" = "Working Hours";
+"settings.work_start" = "Work Start";
+"settings.work_end" = "Work End";
+"settings.privacy_data" = "Privacy & Data";
+"settings.debug" = "Debug";
+"settings.debug_mode" = "Debug Mode";
+"settings.about" = "About";
+"settings.version" = "Version";
+"settings.build" = "Build";
+"settings.reset_all" = "Reset All Settings";

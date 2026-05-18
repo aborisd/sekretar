@@ -24,6 +24,8 @@ enum AnalyticsEvent: String, CaseIterable {
     case reminderSnoozed = "reminder_snoozed"
     case calendarImported = "calendar_imported"
     case settingsOpened = "settings_opened"
+    case settingsChanged = "settings_changed"
+    case settingsReset = "settings_reset"
     case onboardingCompleted = "onboarding_completed"
 }
 

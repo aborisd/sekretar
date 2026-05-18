@@ -491,16 +491,8 @@ struct AIActionInlineCard: View {
     }
 
     private var confidenceBadge: some View {
-        let percent = Int((action.confidence * 100).rounded())
-        return Label("\(percent)%", systemImage: "sparkles")
-            .font(.caption2.weight(.semibold))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(actionColor.opacity(0.16))
-            )
-            .foregroundStyle(actionColor)
+        // Hidden - confidence is internal metric, not useful for users
+        EmptyView()
     }
 
     @ViewBuilder

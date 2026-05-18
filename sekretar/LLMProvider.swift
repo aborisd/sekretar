@@ -375,7 +375,19 @@ final class EnhancedLLMProvider: LLMProviderProtocol {
     
     func detectIntent(_ input: String) async throws -> UserIntent {
         let s = input.lowercased()
-        // RU/EN create task
+
+        // CRITICAL FIX: Check for EVENT/CALENDAR words FIRST (higher priority than tasks)
+        // These indicate calendar events, not tasks
+        if s.containsAny(["событие", "event", "встреч", "meeting", "позвони", "call", "созвон"]) {
+            // Event creation
+            if s.containsAny(["добавь", "создай", "запланируй", "add", "create", "schedule", "new"]) {
+                return .scheduleTask  // This will trigger event creation, not task
+            }
+            // Default to scheduling for event-related words
+            return .scheduleTask
+        }
+
+        // RU/EN create task (only if NOT an event)
         if s.containsAny(["создай", "добавь", "создать", "добавить"]) && s.containsAny(["задач", "task"]) {
             return .createTask
         }

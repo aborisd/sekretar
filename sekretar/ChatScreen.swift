@@ -6,36 +6,26 @@ import Combine
 @MainActor
 final class ChatViewModel: ObservableObject {
     @Published var messages: [ChatMessage] = [
-        ChatMessage(author: .assistant, text: "Привет! Готов помочь с планами.")
+        ChatMessage(author: .assistant, text: "Привет! Могу отвечать как AI или разбирать команды для задач и календаря.")
     ]
     @Published var input: String = ""
     @Published var typing: Bool = false
-    @Published var isAIEnabled: Bool
 
     private let ai: AIIntentService
     var currentTask: Task<Void, Never>? = nil
-    private var cancellables: Set<AnyCancellable> = []
 
     init(service: AIIntentService? = nil) {
         let resolvedService = service ?? AIIntentService.shared
         self.ai = resolvedService
-        self._isAIEnabled = Published(initialValue: resolvedService.isChatLLMEnabled)
-
-        resolvedService.$isChatLLMEnabled
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] enabled in
-                self?.isAIEnabled = enabled
-            }
-            .store(in: &cancellables)
     }
 
-    func send() {
+    func send(mode: ChatMode) {
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
         messages.append(ChatMessage(author: .user, text: trimmed))
         input = ""
-        typing = isAIEnabled
+        typing = true
         currentTask?.cancel()
         currentTask = Task { @MainActor [weak self] in
             guard let self else { return }
@@ -44,22 +34,54 @@ final class ChatViewModel: ObservableObject {
                 self.currentTask = nil
             }
 
-            await self.ai.processUserInput(trimmed)
-            self.handleAIResult(input: trimmed)
+            switch mode {
+            case .assistant:
+                do {
+                    let answer = try await self.ai.chatResponse(for: trimmed)
+                    self.messages.append(ChatMessage(author: .assistant, text: self.condensedAnswer(answer), style: .assistantCard))
+                } catch is CancellationError {
+                    return
+                } catch {
+                    self.messages.append(ChatMessage(author: .assistant, text: "Не получилось получить ответ LLM: \(error.localizedDescription)"))
+                }
+            case .actions:
+                await self.processActionInput(trimmed, echoUser: false)
+            }
         }
+    }
+
+    func sendActionPreview() {
+        let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        messages.append(ChatMessage(author: .user, text: trimmed))
+        input = ""
+        typing = true
+        currentTask?.cancel()
+        currentTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer {
+                self.typing = false
+                self.currentTask = nil
+            }
+            await self.processActionInput(trimmed, echoUser: false)
+        }
+    }
+
+    func processActionInput(_ text: String, echoUser: Bool) async {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        if echoUser {
+            messages.append(ChatMessage(author: .user, text: trimmed))
+        }
+        await ai.processUserInput(trimmed)
+        handleAIResult(input: trimmed)
     }
 
     func stop() {
         currentTask?.cancel()
         currentTask = nil
         typing = false
-    }
-
-    func toggleAIMode() {
-        let newValue = !ai.isChatLLMEnabled
-        ai.setChatLLMEnabled(newValue)
-        let status = newValue ? "ИИ включен" : "ИИ выключен"
-        messages.append(ChatMessage(author: .system, text: status, style: .banner))
     }
 
     private func handleAIResult(input: String) {
@@ -205,6 +227,27 @@ final class ChatViewModel: ObservableObject {
     }()
 }
 
+enum ChatMode: String, CaseIterable, Identifiable {
+    case assistant
+    case actions
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .assistant: return "AI-вопрос"
+        case .actions: return "Задачи"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .assistant: return "bubble.left.and.text.bubble.right"
+        case .actions: return "wand.and.stars"
+        }
+    }
+}
+
 // MARK: - Compact Bubble
 private struct Bubble: View {
     let message: ChatMessage
@@ -262,6 +305,7 @@ struct ChatScreen: View {
     @State private var eventEditorHandle: EventEditorPresentation?
 
     @StateObject private var voice = VoiceInputService()
+    @State private var chatMode: ChatMode = .assistant
 
     var body: some View {
         VStack(spacing: 0) {
@@ -295,9 +339,9 @@ struct ChatScreen: View {
                             .padding(.horizontal, 12)
                         }
 
-                        // Встроенная карточка предпросмотра действия
+                        // Modern iOS-friendly карточка предпросмотра действия
                         if let pending = ai.pendingAction {
-                            AIActionInlineCard(
+                            ModernAIActionCard(
                                 action: Binding(
                                     get: { ai.pendingAction ?? pending },
                                     set: { ai.pendingAction = $0 }
@@ -315,11 +359,10 @@ struct ChatScreen: View {
                                         }
                                     }
                                 },
-                                onCancel: { ai.cancelPendingAction() },
-                                onOpenTaskEditor: { openTaskEditor(for: $0) },
-                                onOpenEventEditor: { openEventEditor(for: $0) }
+                                onCancel: { ai.cancelPendingAction() }
                             )
                             .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
                         }
 
                         // Якорь для автоскролла
@@ -339,104 +382,94 @@ struct ChatScreen: View {
             Divider()
 
             // Ввод
-            HStack(spacing: 8) {
-                TextField("Напишите…", text: $vm.input, axis: .vertical)
-                    .textFieldStyle(.plain)
-                    .padding(.vertical, 8)
-                    .padding(.horizontal, 12)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(DesignSystem.Colors.cardBackground)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .stroke(DesignSystem.Colors.textTertiary.opacity(0.12))
-                    )
-                    .lineLimit(1...5)
+            VStack(spacing: 8) {
+                Picker("Режим чата", selection: $chatMode) {
+                    ForEach(ChatMode.allCases) { mode in
+                        Label(mode.title, systemImage: mode.icon).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .disabled(vm.typing || ai.isProcessing)
 
-                if vm.typing || ai.isProcessing {
-                    Button(action: vm.stop) {
-                        Image(systemName: "stop.circle.fill")
+                HStack(spacing: 8) {
+                    TextField(placeholder, text: $vm.input, axis: .vertical)
+                        .textFieldStyle(.plain)
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(DesignSystem.Colors.cardBackground)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(DesignSystem.Colors.textTertiary.opacity(0.12))
+                        )
+                        .lineLimit(1...5)
+
+                    if vm.typing || ai.isProcessing {
+                        Button(action: vm.stop) {
+                            Image(systemName: "stop.circle.fill")
+                                .font(.system(size: 16, weight: .semibold))
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(Color.red.opacity(0.85))
+                    } else {
+                        Button(action: {
+                            vm.currentTask?.cancel()
+                            vm.currentTask = Task { @MainActor in
+                            if voice.isRecording {
+                                await voice.stop()
+                                let text = voice.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+                                if !text.isEmpty {
+                                    vm.input = text
+                                    vm.send(mode: chatMode)
+                                }
+                                voice.reset()
+                                vm.input = ""
+                            } else {
+                                voice.reset()
+                                vm.input = ""
+                                await voice.start()
+                            }
+                        } }) {
+                            Image(systemName: voice.isRecording ? "mic.circle.fill" : "mic.circle")
+                                .font(.system(size: 16, weight: .semibold))
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(DesignSystem.Colors.primaryTeal)
+                        .disabled(ai.isProcessing)
+                    }
+
+                    if chatMode == .actions {
+                        Button {
+                            vm.sendActionPreview()
+                        } label: {
+                            Image(systemName: "wand.and.stars")
+                                .font(.system(size: 16, weight: .semibold))
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(vm.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || ai.isProcessing)
+                    }
+
+                    Button(action: {
+                        if voice.isRecording {
+                            Task { await voice.stop(); voice.reset() }
+                        }
+                        vm.send(mode: chatMode)
+                    }) {
+                        Image(systemName: chatMode == .assistant ? "paperplane.fill" : "checkmark.circle.fill")
                             .font(.system(size: 16, weight: .semibold))
                     }
                     .buttonStyle(.borderedProminent)
-                    .tint(Color.red.opacity(0.85))
-                } else {
-                    Button(action: { 
-                        vm.currentTask?.cancel()
-                        vm.currentTask = Task { @MainActor in
-                        if voice.isRecording {
-                            await voice.stop()
-                            let text = voice.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
-                            if !text.isEmpty {
-                                await ai.processUserInput(text)
-                            }
-                            voice.reset()
-                            vm.input = ""
-                        } else {
-                            voice.reset()
-                            vm.input = ""
-                            await voice.start()
-                        }
-                    } }) {
-                        Image(systemName: voice.isRecording ? "mic.circle.fill" : "mic.circle")
-                            .font(.system(size: 16, weight: .semibold))
-                    }
-                    .buttonStyle(.bordered)
                     .tint(DesignSystem.Colors.primaryTeal)
-                    .disabled(ai.isProcessing)
+                    .disabled(vm.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || ai.isProcessing)
                 }
-
-                // Кнопка структурного разбора/интента (предпросмотр действий)
-                Button {
-                    let text = vm.input.trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard !text.isEmpty else { return }
-                    vm.currentTask?.cancel()
-                    vm.currentTask = Task { @MainActor in await ai.processUserInput(text) }
-                    // Сбрасываем поле ввода сразу после запуска анализа
-                    vm.input = ""
-                } label: {
-                    Image(systemName: "wand.and.stars")
-                        .font(.system(size: 16, weight: .semibold))
-                }
-                .buttonStyle(.bordered)
-
-                Button(action: {
-                    if voice.isRecording {
-                        Task { await voice.stop(); voice.reset() }
-                    }
-                    vm.send()
-                }) {
-                    Image(systemName: "paperplane.fill")
-                        .font(.system(size: 16, weight: .semibold))
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(DesignSystem.Colors.primaryTeal)
-                .disabled(vm.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || ai.isProcessing)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .background(DesignSystem.Colors.background)
         }
         .navigationTitle("Чат")
-#if os(iOS)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button(action: vm.toggleAIMode) {
-                    Image(systemName: "brain.head.profile")
-                        .symbolRenderingMode(.hierarchical)
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(vm.isAIEnabled ? .white : DesignSystem.Colors.primaryTeal)
-                        .padding(8)
-                        .background(
-                            Circle()
-                                .fill(vm.isAIEnabled ? DesignSystem.Colors.primaryTeal : DesignSystem.Colors.primaryTeal.opacity(0.12))
-                        )
-                }
-                .accessibilityLabel(vm.isAIEnabled ? "Отключить ИИ" : "Включить ИИ")
-            }
-        }
-#endif
         // Раньше предпросмотр открывался как модалка; теперь он инлайн
         // Баннер Undo после применения расписания
         .overlay(alignment: .bottom) {
@@ -487,8 +520,10 @@ struct ChatScreen: View {
             guard !isRec else { return }
             let text = voice.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty else { return }
-            vm.input = text
-            vm.send()
+            if vm.input.isEmpty {
+                vm.input = text
+                vm.send(mode: chatMode)
+            }
             voice.reset()
         }
         .onChange(of: ai.pendingAction?.id) { _ in
@@ -508,9 +543,19 @@ struct ChatScreen: View {
         }
         .onChange(of: ai.lastResultToast) { toast in
             if let toast, !toast.isEmpty {
-                vm.messages.append(ChatMessage(author: .assistant, text: toast))
+                // Don't add toast to chat - handleAIResult already adds summaries
+                // vm.messages.append(ChatMessage(author: .assistant, text: toast))
                 ai.lastResultToast = nil
             }
+        }
+    }
+
+    private var placeholder: String {
+        switch chatMode {
+        case .assistant:
+            return "Спросите AI…"
+        case .actions:
+            return "Например: создай задачу завтра в 10…"
         }
     }
 

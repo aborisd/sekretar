@@ -12,91 +12,60 @@ final class AIIntentService: ObservableObject {
     @Published var showingPreview = false
     @Published var lastResultToast: String?
     @Published var lastOpenLink: OpenLink?
-    @Published var isChatLLMEnabled: Bool {
-        didSet {
-            if oldValue != isChatLLMEnabled {
-                UserDefaults.standard.set(isChatLLMEnabled, forKey: Self.chatModeStorageKey)
-            }
-        }
-    }
 
     private let llmProvider: LLMProviderProtocol
     private let context: NSManagedObjectContext
     private let naturalLanguageParser = NaturalLanguageDateParser()
     private var lastAppliedEventIDs: [UUID] = []
-    
+
     init(context: NSManagedObjectContext = PersistenceController.shared.container.viewContext,
          llmProvider: LLMProviderProtocol = AIProviderFactory.current()) {
         self.context = context
         self.llmProvider = llmProvider
-        let stored = UserDefaults.standard.object(forKey: Self.chatModeStorageKey) as? Bool
-        self.isChatLLMEnabled = stored ?? true
     }
-
-    private static let chatModeStorageKey = "ai.chat.llm.enabled"
 
     func chatResponse(for input: String) async throws -> String {
-        try await llmProvider.generateResponse(input)
-    }
-
-    func setChatLLMEnabled(_ enabled: Bool) {
-        guard isChatLLMEnabled != enabled else { return }
-        isChatLLMEnabled = enabled
+        do {
+            return try await llmProvider.generateResponse(input)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            return try await EnhancedLLMProvider.shared.generateResponse(input)
+        }
     }
     
-    // MARK: - Main Processing Method
+    // MARK: - Main Processing Method (BRD JSON Contract)
     func processUserInput(_ input: String) async {
         if Task.isCancelled { return }
         isProcessing = true
         defer { isProcessing = false }
-        
+
         do {
             try Task.checkCancellation()
-            // Step 1: Heuristic intent detection (RU/EN) before LLM
-            if let forced = forcedIntent(from: input) {
-                // Generate action via local/JSON helpers without relying on free-form chat
-                let action = try await generateAction(for: forced, input: input)
-                let validationResult = try await validateAction(action)
-                if validationResult.isValid {
-                    if shouldAutoApply(action: action, originalInput: input, forced: true) {
-                        try await executeAction(action)
-                        try await logAIAction(action)
-                        emitToast(successToast(for: action))
-                        pendingAction = nil
-                        showingPreview = false
-                    } else {
-                        pendingAction = action
-                        showingPreview = true
-                        try await logAIAction(action)
-                    }
-                } else {
-                    let clarificationAction = AIAction(
-                        type: .requestClarification,
-                        title: "Need More Information",
-                        description: validationResult.errorMessage ?? "Could you provide more details?",
-                        confidence: 0.9,
-                        requiresConfirmation: true,
-                        payload: ["original_input": input]
-                    )
-                    pendingAction = clarificationAction
-                    showingPreview = true
+
+            // NEW: Direct BRD JSON contract parsing (BRD строки 296-323)
+            let action: AIAction
+
+            // Try BRD contract first if RemoteLLMProvider is available
+            if let remoteLLM = llmProvider as? RemoteLLMProvider {
+                do {
+                    action = try await remoteLLM.parseBRDIntent(input)
+                } catch {
+                    // Fallback to legacy intent detection
+                    let intent = try await llmProvider.detectIntent(input)
+                    action = try await generateAction(for: intent, input: input)
                 }
-                return
+            } else {
+                // Fallback for non-remote providers
+                let intent = try await llmProvider.detectIntent(input)
+                action = try await generateAction(for: intent, input: input)
             }
 
-            // Step 1 (fallback): Parse user intent via LLM provider
-            try Task.checkCancellation()
-            let intent = try await llmProvider.detectIntent(input)
-            
-            // Step 2: Generate structured action based on intent
-            try Task.checkCancellation()
-            let action = try await generateAction(for: intent, input: input)
-            
-            // Step 3: Validate the action
+            // Validate the action
             try Task.checkCancellation()
             let validationResult = try await validateAction(action)
-            
-            // Step 4: Show preview if action is valid
+
+            // Show preview if action is valid
             if validationResult.isValid {
                 if shouldAutoApply(action: action, originalInput: input, forced: false) {
                     try await executeAction(action)
@@ -123,11 +92,11 @@ final class AIIntentService: ObservableObject {
                 pendingAction = clarificationAction
                 showingPreview = true
             }
-            
+
         } catch is CancellationError {
             // silently ignore
         } catch {
-            print("Error processing user input: \(error)")
+            print("❌ Error processing user input: \(error)")
             let errorAction = AIAction(
                 type: .showError,
                 title: "Processing Error",
@@ -142,32 +111,8 @@ final class AIIntentService: ObservableObject {
     }
 
     // MARK: - Heuristics (deterministic router)
-    private func forcedIntent(from input: String) -> UserIntent? {
-        let s = input.lowercased()
-        func any(_ arr: [String]) -> Bool { arr.contains { s.contains($0) } }
-        // If phrase mentions meeting/calendar explicitly → scheduling
-        if any(["встреч", "в календар"]) { return .scheduleTask }
-        // Create task when verbs + (task noun OR generic command with time window)
-        if any(["создай","добавь","создать","добавить","поставь","занеси"]) {
-            if any(["задач","task"]) { return .createTask }
-            // если есть окно времени и нет слова встречи — считаем задачей
-            if hasTimeRangeOrPoint(in: s) && !any(["встреч"]) { return .createTask }
-        }
-        // Time range present? If не указана задача/встреча, считаем это планированием
-        if hasTimeRangeOrPoint(in: s) { return .scheduleTask }
-        // Scheduling verbs
-        if any(["запланируй","подбери","найди","распиши","назначь","schedule"]) { return .scheduleTask }
-        return nil
-    }
+    // NOTE: Heuristics removed - full LLM parsing now handles all intent detection
 
-    private func hasTimeRangeOrPoint(in s: String) -> Bool {
-        // quick check for digits or common words
-        if s.range(of: #"\b([01]?\d|2[0-3])([:.][0-5]\d)?\b"#, options: .regularExpression) != nil { return true }
-        if ["час", "часа", "пол", "три", "четыр", "пять", "шесть", "семь", "восемь", "девять", "десять", "одиннадцать", "двенадцать"].contains(where: { s.contains($0) }) { return true }
-        if s.contains("с ") && s.contains(" до ") { return true }
-        return false
-    }
-    
     // MARK: - Action Execution
     func executeAction(_ action: AIAction) async throws {
         switch action.type {
@@ -226,6 +171,10 @@ final class AIIntentService: ObservableObject {
         case .requestSuggestion:
             return try await generateSuggestionAction(input: input)
         case .askQuestion:
+            // Check if asking about today/schedule
+            if input.lowercased().containsAny(["сегодня", "today", "мой день", "my day", "расписание", "schedule", "что у меня"]) {
+                return await handleShowTodayIntent()
+            }
             return try await generateQuestionAction(input: input)
         case .unknown:
             return AIAction(
@@ -302,14 +251,36 @@ final class AIIntentService: ObservableObject {
     }
     
     private func generateDeleteTaskAction(input: String) async throws -> AIAction {
-        return AIAction(
-            type: .deleteTask,
-            title: L10n.AIActionText.deleteTaskTitle,
-            description: localized("Какую задачу удалить?", en: "Which task would you like to remove?"),
-            confidence: 0.7,
-            requiresConfirmation: true,
-            payload: ["input": input]
-        )
+        // Try to parse which task to delete from user input
+        let taskTitle = extractTaskTitle(from: input)
+
+        // Fetch matching task (SMART: exact match priority)
+        let matchingTask = await fetchTaskEntitySmart(title: taskTitle)
+
+        if let task = matchingTask {
+            // Found exact task - ready to delete
+            return AIAction(
+                type: .deleteTask,
+                title: L10n.AIActionText.deleteTaskTitle,
+                description: localized("Удалить задачу \"\(task.title ?? "")\"?", en: "Delete task \"\(task.title ?? "")\"?"),
+                confidence: 0.9,
+                requiresConfirmation: true,
+                payload: [
+                    "task_id": task.id?.uuidString ?? "",
+                    "title": task.title ?? ""
+                ]
+            )
+        } else {
+            // Couldn't find task - ask for clarification
+            return AIAction(
+                type: .requestClarification,
+                title: localized("Задача не найдена", en: "Task not found"),
+                description: localized("Не могу найти задачу \"\(taskTitle)\". Проверьте название или выберите задачу из списка.", en: "Cannot find task \"\(taskTitle)\". Please check the name or select from task list."),
+                confidence: 0.6,
+                requiresConfirmation: true,
+                payload: ["input": input, "searched_title": taskTitle]
+            )
+        }
     }
     
     private func generateScheduleTaskAction(input: String) async throws -> AIAction {
@@ -347,7 +318,7 @@ final class AIIntentService: ObservableObject {
         }
         draft = await normalizeEventDraft(draft, originalInput: input)
 
-        let title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? localized("Событие", en: "Event") : draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? localized("Соб��тие", en: "Event") : draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
         var payload: [String: Any] = [
             "title": title,
             "start": draft.start,
@@ -555,9 +526,7 @@ final class AIIntentService: ObservableObject {
     }
     
     private func executeCreateEvent(_ action: AIAction) async throws {
-        guard let title = action.payload["title"] as? String, !title.isEmpty else {
-            throw AIError.missingRequiredField("title")
-        }
+        let title = try validateTitle(action.payload["title"] as? String)
         let start = action.payload["start"] as? Date ?? Date().addingTimeInterval(3600)
         let end = action.payload["end"] as? Date ?? start.addingTimeInterval(3600)
         let isAllDay = action.payload["is_all_day"] as? Bool ?? false
@@ -1112,6 +1081,38 @@ final class AIIntentService: ObservableObject {
         pendingAction = nil
         showingPreview = false
     }
+
+    // MARK: - Critical Fixes Helpers
+
+    private func validateTitle(_ title: String?) throws -> String {
+        guard let rawTitle = title,
+              !rawTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw AIError.missingRequiredField("title")
+        }
+        return rawTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func fetchTaskEntitySmart(title: String) async -> TaskEntity? {
+        await context.perform {
+            let fr: NSFetchRequest<TaskEntity> = TaskEntity.fetchRequest()
+            fr.predicate = NSPredicate(format: "title CONTAINS[cd] %@", title)
+            fr.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
+
+            let results = (try? self.context.fetch(fr)) ?? []
+
+            // SMART MATCHING: Priority 1: Exact match
+            if let exact = results.first(where: { $0.title?.lowercased() == title.lowercased() }) {
+                return exact
+            }
+
+            // Priority 2: Shortest title (closest match)
+            if results.count > 1 {
+                return results.min(by: { ($0.title?.count ?? Int.max) < ($1.title?.count ?? Int.max) })
+            }
+
+            return results.first
+        }
+    }
 }
 
 // MARK: - Data Models
@@ -1192,3 +1193,11 @@ enum AIError: LocalizedError {
 }
 
 // MARK: - Analytics (no extension needed; case is defined in AnalyticsEvent)
+
+// MARK: - Helper Extension
+private extension String {
+    func containsAny(_ words: [String]) -> Bool {
+        let lower = self.lowercased()
+        return words.contains { lower.contains($0.lowercased()) }
+    }
+}

@@ -41,8 +41,7 @@ enum AIProviderFactory {
         case "local":
             return EnhancedLLMProvider.shared
         case "openai":
-            // Placeholder until OpenRouter/OpenAI is integrated
-            return EnhancedLLMProvider.shared
+            return RemoteLLMProvider.shared
         case "disabled":
             // For now, route to fallback to keep app usable
             return EnhancedLLMProvider.shared

@@ -11,7 +11,6 @@ class SettingsViewModel: ObservableObject {
     @Published var selectedLanguage: AppLanguage = .russian
     @Published var workingHoursStart: Date = Calendar.current.date(from: DateComponents(hour: 9))!
     @Published var workingHoursEnd: Date = Calendar.current.date(from: DateComponents(hour: 18))!
-    @Published var selectedAIProvider: AIProvider = .openAI
     @Published var debugModeEnabled: Bool = false
     
     private let context: NSManagedObjectContext
@@ -71,13 +70,11 @@ class SettingsViewModel: ObservableObject {
     }
     
     private func loadSettings() {
-        notificationsEnabled = defaults.bool(forKey: "notifications_enabled") 
+        notificationsEnabled = defaults.bool(forKey: "notifications_enabled")
         selectedTheme = AppTheme(rawValue: defaults.string(forKey: "app_theme") ?? "system") ?? .system
         selectedLanguage = AppLanguage(rawValue: defaults.string(forKey: "app_language") ?? "ru") ?? .russian
-        // Default to MLC provider in dev
-        selectedAIProvider = AIProvider(rawValue: defaults.string(forKey: "ai_provider") ?? "mlc") ?? .mlc
         debugModeEnabled = defaults.bool(forKey: "debug_mode_enabled")
-        
+
         if let workStartData = defaults.object(forKey: "work_hours_start") as? Date {
             workingHoursStart = workStartData
         }
@@ -85,16 +82,15 @@ class SettingsViewModel: ObservableObject {
             workingHoursEnd = workEndData
         }
     }
-    
+
     func saveSettings() {
         defaults.set(notificationsEnabled, forKey: "notifications_enabled")
         defaults.set(selectedTheme.rawValue, forKey: "app_theme")
         defaults.set(selectedLanguage.rawValue, forKey: "app_language")
-        defaults.set(selectedAIProvider.rawValue, forKey: "ai_provider")
         defaults.set(debugModeEnabled, forKey: "debug_mode_enabled")
         defaults.set(workingHoursStart, forKey: "work_hours_start")
         defaults.set(workingHoursEnd, forKey: "work_hours_end")
-        
+
         AnalyticsService.shared.track(.settingsChanged)
     }
     
@@ -119,14 +115,14 @@ class SettingsViewModel: ObservableObject {
     
     func resetAllSettings() {
         let keys = [
-            "notifications_enabled", "app_theme", "app_language", 
-            "ai_provider", "debug_mode_enabled", "work_hours_start", "work_hours_end"
+            "notifications_enabled", "app_theme", "app_language",
+            "debug_mode_enabled", "work_hours_start", "work_hours_end"
         ]
-        
+
         for key in keys {
             defaults.removeObject(forKey: key)
         }
-        
+
         loadSettings()
         AnalyticsService.shared.track(.settingsReset)
     }
@@ -161,17 +157,10 @@ class SettingsViewModel: ObservableObject {
                 "notifications_enabled": notificationsEnabled,
                 "app_theme": selectedTheme.rawValue,
                 "app_language": selectedLanguage.rawValue,
-                "ai_provider": selectedAIProvider.rawValue,
                 "debug_mode_enabled": debugModeEnabled
             ],
             "export_date": Date().timeIntervalSince1970,
             "app_version": Bundle.main.infoDictionary?["CFBundleShortVersionString"] ?? "1.0"
         ]
     }
-}
-
-// Analytics extension
-extension AnalyticsEvent {
-    static let settingsChanged = AnalyticsEvent(rawValue: "settings_changed")!
-    static let settingsReset = AnalyticsEvent(rawValue: "settings_reset")!
 }

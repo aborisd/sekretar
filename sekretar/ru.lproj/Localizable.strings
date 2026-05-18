@@ -170,3 +170,24 @@
 "widget.next_task.description" = "Показать следующую приоритетную задачу";
 "widget.no_tasks" = "Нет задач";
 "widget.all_done" = "Всё готово!";
+
+/* Settings */
+"settings.title" = "Настройки";
+"settings.general" = "Основные";
+"settings.theme" = "Тема оформления";
+"settings.language" = "Язык";
+"settings.ai" = "Искусственный интеллект";
+"settings.ai_provider" = "AI провайдер";
+"settings.permissions" = "Разрешения";
+"settings.notifications" = "Уведомления";
+"settings.calendar_access" = "Доступ к календарю";
+"settings.working_hours" = "Рабочие часы";
+"settings.work_start" = "Начало дня";
+"settings.work_end" = "Конец дня";
+"settings.privacy_data" = "Конфиденциальность и данные";
+"settings.debug" = "Отладка";
+"settings.debug_mode" = "Режим отладки";
+"settings.about" = "О приложении";
+"settings.version" = "Версия";
+"settings.build" = "Сборка";
+"settings.reset_all" = "Сбросить все настройки";
