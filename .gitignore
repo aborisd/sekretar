@@ -56,3 +56,13 @@ server/.env
 # Local iOS secrets (do not commit real keys)
 sekretar/RemoteLLM.plist
 sekretar/RemoteLLM.local.plist
+
+# Backend (local-only, not part of showcase)
+backend/
+
+# Backup files (Xcode/manual)
+*.backup
+
+# Python caches
+__pycache__/
+*.pyc
