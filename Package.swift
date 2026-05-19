@@ -28,9 +28,6 @@ let package = Package(
                 "Assets.xcassets",
                 "Info.plist",
                 "calendAIApp.swift",
-                "calendAIApp.swift.backup",
-                "EnhancedCalendarView.swift.backup",
-                "SettingsViewModel.swift.backup",
                 "calendAI.xcdatamodeld"
             ],
             resources: [
