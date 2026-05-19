@@ -10,9 +10,7 @@
 
 Sekretar turns a normal conversation into a managed day. Type "Schedule a sync with Anna tomorrow at 11" or "Remind me to renew the lease on Friday" and Sekretar parses the intent, shows an inline action card, and — after one tap — writes it to your calendar or task list. It runs locally first, calls an LLM only when heuristics aren't sure, and supports both a self-hosted OpenAI-compatible endpoint and on-device inference via [MLC-LLM](https://github.com/mlc-ai/mlc-llm).
 
-<p align="center">
-  <img src="docs/image.png" width="420" alt="Sekretar screenshot" />
-</p>
+<
 
 ## Features
 
